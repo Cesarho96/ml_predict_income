@@ -1,0 +1,125 @@
+{
+  "segmento": "No ocupados",
+  "ruteo": "tiene_trabajo_principal == 0",
+  "k": 7,
+  "features": [
+    "actividad_no_ocupado",
+    "es_jefe_hogar",
+    "anios_escolaridad",
+    "edad",
+    "cve_entidad",
+    "integrantes_hogar",
+    "situacion_conyugal"
+  ],
+  "formulario": [
+    {
+      "orden": 1,
+      "variable": "actividad_no_ocupado",
+      "pregunta": "Si no trabajaste, ¿a qué te dedicaste? (jubilado, estudiante, hogar…)",
+      "estabilidad": 3,
+      "importancia": 0.21427
+    },
+    {
+      "orden": 2,
+      "variable": "es_jefe_hogar",
+      "pregunta": "¿Eres la persona principal responsable de tu hogar?",
+      "estabilidad": 3,
+      "importancia": 0.07606
+    },
+    {
+      "orden": 3,
+      "variable": "anios_escolaridad",
+      "pregunta": "¿Cuál es el último grado que aprobaste? (nivel + grado)",
+      "estabilidad": 3,
+      "importancia": 0.05364
+    },
+    {
+      "orden": 4,
+      "variable": "edad",
+      "pregunta": "¿Cuántos años tienes?",
+      "estabilidad": 3,
+      "importancia": 0.04135
+    },
+    {
+      "orden": 5,
+      "variable": "cve_entidad",
+      "pregunta": "Estado de residencia — de la ubicación o del código postal",
+      "estabilidad": 3,
+      "importancia": 0.01226
+    },
+    {
+      "orden": 6,
+      "variable": "integrantes_hogar",
+      "pregunta": "¿Cuántas personas viven en tu hogar?",
+      "estabilidad": 3,
+      "importancia": 0.00832
+    },
+    {
+      "orden": 7,
+      "variable": "situacion_conyugal",
+      "pregunta": "¿Cuál es tu situación conyugal?",
+      "estabilidad": 1,
+      "importancia": 0.0059
+    }
+  ],
+  "overrides": [
+    {
+      "segmento": "No ocupados",
+      "acción": "quitar",
+      "variable": "experiencia_potencial",
+      "por": "= f(anios_escolaridad, edad)",
+      "MdAPE_antes": 42.48,
+      "MdAPE_después": 42.07,
+      "costo_pp": -0.41,
+      "aplicado": true
+    }
+  ],
+  "target": {
+    "columna": "ingreso_mensual",
+    "transformacion": "log",
+    "objetivo": "regression_l1 → mediana condicional",
+    "retransformacion": "exp(), sin smearing"
+  },
+  "metricas_test": {
+    "corta": {
+      "k": 7,
+      "MdAPE": 41.62,
+      "pct_20": 25.58,
+      "MdAE": 1416.0,
+      "R2_log": 0.4988
+    },
+    "pool completo": {
+      "k": 18,
+      "MdAPE": 40.79,
+      "pct_20": 25.74,
+      "MdAE": 1401.0,
+      "R2_log": 0.5107
+    }
+  },
+  "pool_completo": [
+    "actividad_no_ocupado",
+    "es_jefe_hogar",
+    "anios_escolaridad",
+    "edad",
+    "experiencia_potencial",
+    "cve_entidad",
+    "integrantes_hogar",
+    "situacion_conyugal",
+    "cotiza_seguridad_social",
+    "hijos_sobrevivientes",
+    "tiene_discapacidad",
+    "tamanio_localidad",
+    "razon_dependencia",
+    "lugar_nacimiento",
+    "se_considera_indigena",
+    "es_mujer",
+    "habla_lengua_indigena",
+    "es_afrodescendiente"
+  ],
+  "techo_cv_train": {
+    "MdAPE": 41.98,
+    "pct_20": 25.75,
+    "MdAE": 1460.0,
+    "R2_log": 0.4795
+  }
+}

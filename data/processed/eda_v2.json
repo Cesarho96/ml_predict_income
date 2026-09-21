@@ -1,0 +1,249 @@
+{
+  "origen": "02_eda_feature_engineering.ipynb",
+  "entrada": "enigh2024_ingreso_personas.parquet",
+  "filas": 179557,
+  "target": "ingreso_mensual",
+  "tratamiento_target": "log(ingreso) con objetivo cuantil/L1; la predicción puntual es la MEDIANA condicional, retransformada con exp() y sin smearing",
+  "metricas_cabecera": [
+    "MdAPE",
+    "% dentro de ±20%",
+    "cobertura del intervalo [q10,q90]"
+  ],
+  "segmentos": {
+    "ruteo": "tiene_trabajo_principal",
+    "ocupados": 139171,
+    "no_ocupados": 40386
+  },
+  "columnas": {
+    "target_y_componentes": [
+      "ing_mens_negocios",
+      "ing_mens_otros",
+      "ing_mens_rentas",
+      "ing_mens_sueldos_salarios",
+      "ing_mens_trabajo_menores",
+      "ing_mens_transferencias",
+      "ingreso_mensual",
+      "log_ingreso_mensual",
+      "ingreso_mensual_laboral"
+    ],
+    "identificadores": [
+      "folioviv",
+      "foliohog",
+      "numren"
+    ],
+    "diseno_muestral": [
+      "factor",
+      "upm",
+      "est_dis"
+    ],
+    "duplicadas_descartadas": [
+      "sexo",
+      "nivel_educativo",
+      "entidad",
+      "entidad_nombre",
+      "region",
+      "municipio_nombre",
+      "es_rural",
+      "vive_en_pareja",
+      "trabajo_mes_pasado",
+      "ocupado",
+      "sinco",
+      "scian",
+      "residentes_vivienda"
+    ],
+    "candidatas": [
+      "edad",
+      "es_afrodescendiente",
+      "es_jefe_hogar",
+      "es_migrante_interno",
+      "es_mujer",
+      "habla_lengua_indigena",
+      "hijos_sobrevivientes",
+      "lugar_nacimiento",
+      "n_dificultades",
+      "parentesco_grupo",
+      "se_considera_indigena",
+      "situacion_conyugal",
+      "tiene_discapacidad",
+      "anios_escolaridad",
+      "asiste_a_escuela",
+      "sabe_leer_escribir",
+      "actividad_no_ocupado",
+      "clase_empleador",
+      "contrato_indefinido",
+      "cotiza_seguridad_social",
+      "empleo_formal",
+      "horas_trabajadas",
+      "n_prestaciones",
+      "n_trabajos",
+      "posicion_ocupacion",
+      "scian_sector",
+      "sin_prestaciones",
+      "sinco_grupo",
+      "tam_empresa",
+      "tiene_contrato_escrito",
+      "tiene_socios",
+      "tiene_trabajo_principal",
+      "tiene_trabajo_secundario",
+      "tipo_actividad_negocio",
+      "trabaja_en_mexico",
+      "cve_entidad",
+      "cve_municipio",
+      "estrato_socioeconomico",
+      "tamanio_localidad",
+      "adultos_mayores_hogar",
+      "clase_hogar",
+      "edad_jefe",
+      "educacion_jefe",
+      "integrantes_hogar",
+      "jefe_mujer",
+      "menores_hogar",
+      "ocupados_hogar",
+      "perceptores_hogar",
+      "n_automoviles",
+      "tiene_celular",
+      "tiene_computadora",
+      "tiene_internet",
+      "tiene_tarjeta_credito",
+      "agua_entubada_dentro",
+      "drenaje_publico",
+      "hacinamiento",
+      "material_piso",
+      "num_cuartos",
+      "num_dormitorios",
+      "tenencia_vivienda",
+      "tiene_electricidad",
+      "tipo_vivienda",
+      "experiencia_potencial",
+      "jornada",
+      "formalidad",
+      "tam_empresa_grupo",
+      "sector_agrupado",
+      "razon_dependencia"
+    ],
+    "nuevas": [
+      "experiencia_potencial",
+      "jornada",
+      "formalidad",
+      "tam_empresa_grupo",
+      "sector_agrupado",
+      "razon_dependencia"
+    ]
+  },
+  "duplicados": [
+    {
+      "conserva": "es_mujer",
+      "descarta": [
+        "sexo"
+      ],
+      "motivo": "misma variable; la binaria evita una categoría"
+    },
+    {
+      "conserva": "anios_escolaridad",
+      "descarta": [
+        "nivel_educativo"
+      ],
+      "motivo": "continua y ordenada; el nivel es un binning de ella"
+    },
+    {
+      "conserva": "cve_entidad",
+      "descarta": [
+        "entidad",
+        "entidad_nombre",
+        "region"
+      ],
+      "motivo": "una sola codificación de estado; region es un binning"
+    },
+    {
+      "conserva": "cve_municipio",
+      "descarta": [
+        "municipio_nombre"
+      ],
+      "motivo": "código y nombre son la misma variable"
+    },
+    {
+      "conserva": "tamanio_localidad",
+      "descarta": [
+        "es_rural"
+      ],
+      "motivo": "ordinal de 4 niveles contiene a la binaria"
+    },
+    {
+      "conserva": "situacion_conyugal",
+      "descarta": [
+        "vive_en_pareja"
+      ],
+      "motivo": "la categórica contiene a la binaria"
+    },
+    {
+      "conserva": "tiene_trabajo_principal",
+      "descarta": [
+        "trabajo_mes_pasado",
+        "ocupado"
+      ],
+      "motivo": "las tres son la misma condición"
+    },
+    {
+      "conserva": "sinco_grupo",
+      "descarta": [
+        "sinco"
+      ],
+      "motivo": "477 códigos no son preguntables; el grupo de 1 dígito rinde igual"
+    },
+    {
+      "conserva": "scian_sector",
+      "descarta": [
+        "scian"
+      ],
+      "motivo": "mismo argumento en la actividad económica"
+    },
+    {
+      "conserva": "integrantes_hogar",
+      "descarta": [
+        "residentes_vivienda"
+      ],
+      "motivo": "casi idénticas; se conserva la del hogar, preguntable"
+    }
+  ],
+  "pool_preguntable": [
+    "sinco_grupo",
+    "tiene_contrato_escrito",
+    "formalidad",
+    "contrato_indefinido",
+    "horas_trabajadas",
+    "tam_empresa_grupo",
+    "clase_empleador",
+    "anios_escolaridad",
+    "sector_agrupado",
+    "jornada",
+    "posicion_ocupacion",
+    "tamanio_localidad",
+    "hijos_sobrevivientes",
+    "es_mujer",
+    "es_jefe_hogar",
+    "se_considera_indigena",
+    "habla_lengua_indigena",
+    "edad",
+    "integrantes_hogar",
+    "lugar_nacimiento",
+    "situacion_conyugal",
+    "tiene_discapacidad",
+    "asiste_a_escuela",
+    "n_trabajos",
+    "tiene_trabajo_secundario",
+    "es_afrodescendiente",
+    "actividad_no_ocupado",
+    "tiene_trabajo_principal",
+    "n_prestaciones",
+    "tam_empresa",
+    "empleo_formal",
+    "cotiza_seguridad_social",
+    "scian_sector",
+    "cve_entidad",
+    "experiencia_potencial",
+    "sin_prestaciones",
+    "es_migrante_interno",
+    "razon_dependencia"
+  ],
+  "siguiente_paso": "03_feature_selection.ipynb — split por upm, selección sobre train, curva desempeño vs k, congelar ~15 features por segmento"
+}

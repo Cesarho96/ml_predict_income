@@ -1,0 +1,180 @@
+{
+  "segmento": "Ocupados",
+  "ruteo": "tiene_trabajo_principal == 1",
+  "k": 10,
+  "features": [
+    "horas_trabajadas",
+    "formalidad",
+    "cve_entidad",
+    "anios_escolaridad",
+    "sinco_grupo",
+    "posicion_ocupacion",
+    "es_jefe_hogar",
+    "sector_agrupado",
+    "es_mujer",
+    "tam_empresa_grupo"
+  ],
+  "formulario": [
+    {
+      "orden": 1,
+      "variable": "horas_trabajadas",
+      "pregunta": "¿Cuántas horas trabajaste la semana pasada?",
+      "estabilidad": 3,
+      "importancia": 0.04196
+    },
+    {
+      "orden": 2,
+      "variable": "formalidad",
+      "pregunta": "¿Tu trabajo te da IMSS/ISSSTE y prestaciones?",
+      "estabilidad": 0,
+      "importancia": 0.00405
+    },
+    {
+      "orden": 3,
+      "variable": "cve_entidad",
+      "pregunta": "Estado de residencia — de la ubicación o del código postal",
+      "estabilidad": 3,
+      "importancia": 0.03139
+    },
+    {
+      "orden": 4,
+      "variable": "anios_escolaridad",
+      "pregunta": "¿Cuál es el último grado que aprobaste? (nivel + grado)",
+      "estabilidad": 3,
+      "importancia": 0.02768
+    },
+    {
+      "orden": 5,
+      "variable": "sinco_grupo",
+      "pregunta": "¿A cuál de estos 10 grupos se parece más tu ocupación?",
+      "estabilidad": 3,
+      "importancia": 0.0222
+    },
+    {
+      "orden": 6,
+      "variable": "posicion_ocupacion",
+      "pregunta": "En tu trabajo, ¿eres empleado, patrón, trabajas por tu cuenta o sin pago?",
+      "estabilidad": 3,
+      "importancia": 0.0195
+    },
+    {
+      "orden": 7,
+      "variable": "es_jefe_hogar",
+      "pregunta": "¿Eres la persona principal responsable de tu hogar?",
+      "estabilidad": 3,
+      "importancia": 0.01782
+    },
+    {
+      "orden": 8,
+      "variable": "sector_agrupado",
+      "pregunta": "¿En qué sector trabajas? (8 opciones)",
+      "estabilidad": -1,
+      "importancia": 0.00082
+    },
+    {
+      "orden": 9,
+      "variable": "es_mujer",
+      "pregunta": "¿Cuál es tu sexo?",
+      "estabilidad": 1,
+      "importancia": 0.01143
+    },
+    {
+      "orden": 10,
+      "variable": "tam_empresa_grupo",
+      "pregunta": "¿Cuántas personas trabajan donde trabajas tú?",
+      "estabilidad": -1,
+      "importancia": 0.00024
+    }
+  ],
+  "overrides": [
+    {
+      "segmento": "Ocupados",
+      "acción": "sustituir",
+      "variable": "n_prestaciones",
+      "por": "formalidad",
+      "MdAPE_antes": 29.91,
+      "MdAPE_después": 30.4,
+      "costo_pp": 0.49,
+      "aplicado": true
+    },
+    {
+      "segmento": "Ocupados",
+      "acción": "sustituir",
+      "variable": "tam_empresa",
+      "por": "tam_empresa_grupo",
+      "MdAPE_antes": 30.4,
+      "MdAPE_después": 30.45,
+      "costo_pp": 0.05,
+      "aplicado": true
+    },
+    {
+      "segmento": "Ocupados",
+      "acción": "sustituir",
+      "variable": "scian_sector",
+      "por": "sector_agrupado",
+      "MdAPE_antes": 30.45,
+      "MdAPE_después": 30.54,
+      "costo_pp": 0.09,
+      "aplicado": true
+    }
+  ],
+  "target": {
+    "columna": "ingreso_mensual",
+    "transformacion": "log",
+    "objetivo": "regression_l1 → mediana condicional",
+    "retransformacion": "exp(), sin smearing"
+  },
+  "metricas_test": {
+    "corta": {
+      "k": 10,
+      "MdAPE": 30.84,
+      "pct_20": 34.32,
+      "MdAE": 2479.0,
+      "R2_log": 0.5215
+    },
+    "pool completo": {
+      "k": 29,
+      "MdAPE": 29.32,
+      "pct_20": 35.68,
+      "MdAE": 2352.0,
+      "R2_log": 0.5611
+    }
+  },
+  "pool_completo": [
+    "horas_trabajadas",
+    "n_prestaciones",
+    "cve_entidad",
+    "anios_escolaridad",
+    "sinco_grupo",
+    "posicion_ocupacion",
+    "es_jefe_hogar",
+    "scian_sector",
+    "es_mujer",
+    "tam_empresa",
+    "edad",
+    "n_trabajos",
+    "formalidad",
+    "tamanio_localidad",
+    "situacion_conyugal",
+    "contrato_indefinido",
+    "experiencia_potencial",
+    "habla_lengua_indigena",
+    "clase_empleador",
+    "se_considera_indigena",
+    "tiene_contrato_escrito",
+    "integrantes_hogar",
+    "hijos_sobrevivientes",
+    "lugar_nacimiento",
+    "razon_dependencia",
+    "tiene_discapacidad",
+    "sin_prestaciones",
+    "es_afrodescendiente",
+    "asiste_a_escuela"
+  ],
+  "techo_cv_train": {
+    "MdAPE": 29.22,
+    "pct_20": 36.27,
+    "MdAE": 2375.0,
+    "R2_log": 0.5353
+  }
+}

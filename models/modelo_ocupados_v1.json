@@ -1,0 +1,203 @@
+{
+  "segmento": "Ocupados",
+  "ruteo": "tiene_trabajo_principal == 1",
+  "familia": "XGBoost",
+  "hiperparametros": {
+    "colsample_bytree": 0.6,
+    "learning_rate": 0.02,
+    "max_depth": 10,
+    "min_child_weight": 1,
+    "n_estimators": 300,
+    "reg_lambda": 1,
+    "subsample": 0.7
+  },
+  "entrenado_ponderado": false,
+  "features": [
+    "horas_trabajadas",
+    "formalidad",
+    "cve_entidad",
+    "anios_escolaridad",
+    "sinco_grupo",
+    "posicion_ocupacion",
+    "es_jefe_hogar",
+    "sector_agrupado",
+    "es_mujer",
+    "tam_empresa_grupo"
+  ],
+  "contrato": [
+    {
+      "variable": "horas_trabajadas",
+      "tipo": "numérica",
+      "min": 1.0,
+      "max": 168.0,
+      "mediana": 48.0,
+      "acepta_nulos": false,
+      "pregunta": "¿Cuántas horas trabajaste la semana pasada?"
+    },
+    {
+      "variable": "formalidad",
+      "tipo": "categórica",
+      "valores": [
+        "1 Informal sin prestaciones",
+        "2 Informal con algunas prestaciones",
+        "3 Formal (con seguridad social)"
+      ],
+      "pregunta": "¿Tu trabajo te da IMSS/ISSSTE y prestaciones?"
+    },
+    {
+      "variable": "cve_entidad",
+      "tipo": "categórica",
+      "valores": [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "08",
+        "09",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "19",
+        "20",
+        "21",
+        "22",
+        "23",
+        "24",
+        "25",
+        "26",
+        "27",
+        "28",
+        "29",
+        "30",
+        "31",
+        "32"
+      ],
+      "pregunta": "Estado de residencia — de la ubicación o del código postal"
+    },
+    {
+      "variable": "anios_escolaridad",
+      "tipo": "numérica",
+      "min": 0.0,
+      "max": 24.0,
+      "mediana": 9.0,
+      "acepta_nulos": false,
+      "pregunta": "¿Cuál es el último grado que aprobaste? (nivel + grado)"
+    },
+    {
+      "variable": "sinco_grupo",
+      "tipo": "categórica",
+      "valores": [
+        "0 Casos especiales",
+        "1 Funcionarios, directores y jefes",
+        "2 Profesionistas y técnicos",
+        "3 Auxiliares en actividades administrativas",
+        "4 Comerciantes, empleados en ventas y agentes",
+        "5 Servicios personales y vigilancia",
+        "6 Actividades agrícolas, ganaderas, forestales, caza y pesca",
+        "7 Artesanales, construcción y otros oficios",
+        "8 Operadores de maquinaria, ensambladores y conductores",
+        "9 Actividades elementales y de apoyo"
+      ],
+      "pregunta": "¿A cuál de estos 10 grupos se parece más tu ocupación?"
+    },
+    {
+      "variable": "posicion_ocupacion",
+      "tipo": "categórica",
+      "valores": [
+        "Empleador",
+        "No especificado",
+        "Subordinado remunerado",
+        "Trabajador por cuenta propia",
+        "Trabajador sin pago"
+      ],
+      "pregunta": "En tu trabajo, ¿eres empleado, patrón, trabajas por tu cuenta o sin pago?"
+    },
+    {
+      "variable": "es_jefe_hogar",
+      "tipo": "numérica",
+      "min": 0.0,
+      "max": 1.0,
+      "mediana": 0.0,
+      "acepta_nulos": false,
+      "pregunta": "¿Eres la persona principal responsable de tu hogar?"
+    },
+    {
+      "variable": "sector_agrupado",
+      "tipo": "categórica",
+      "valores": [
+        "1 Agropecuario",
+        "2 Industria",
+        "3 Construcción",
+        "4 Comercio",
+        "5 Transporte y logística",
+        "6 Servicios profesionales y financieros",
+        "7 Educación, salud y gobierno",
+        "8 Otros servicios",
+        "9 No especificado"
+      ],
+      "pregunta": "¿En qué sector trabajas? (8 opciones)"
+    },
+    {
+      "variable": "es_mujer",
+      "tipo": "numérica",
+      "min": 0.0,
+      "max": 1.0,
+      "mediana": 0.0,
+      "acepta_nulos": false,
+      "pregunta": "¿Cuál es tu sexo?"
+    },
+    {
+      "variable": "tam_empresa_grupo",
+      "tipo": "categórica",
+      "valores": [
+        "0 No aplica / no sabe",
+        "1 Micro (1-5)",
+        "2 Pequeña (6-50)",
+        "3 Mediana (51-250)",
+        "4 Grande (251+)"
+      ],
+      "pregunta": "¿Cuántas personas trabajan donde trabajas tú?"
+    }
+  ],
+  "target": {
+    "columna": "ingreso_mensual",
+    "transformacion": "log",
+    "objetivo": "quantile",
+    "retransformacion": "exp(), sin smearing",
+    "interpretacion": "q50 = mediana condicional del ingreso mensual en MXN de ago-2024"
+  },
+  "factor_conformal": 1.08,
+  "cobertura_objetivo": 0.8,
+  "metricas_test": {
+    "MdAPE": 30.78,
+    "pct_20": 34.35,
+    "MdAE": 2437.0,
+    "MAE": 4748.0,
+    "RMSE": 13105.0,
+    "RMSE_log": 0.7046,
+    "R2_log": 0.5153,
+    "cobertura_80": 80.64,
+    "ancho_mediano": 10857.0,
+    "razon_sup_inf": 3.62
+  },
+  "baseline_test": {
+    "MdAPE": 38.57,
+    "pct_20": 27.75,
+    "MdAE": 3450.0,
+    "MAE": 5854.0,
+    "RMSE": 14227.0,
+    "RMSE_log": 0.9017,
+    "R2_log": 0.2063
+  },
+  "split": "data/processed/split_upm_3way.csv",
+  "version": "v1"
+}

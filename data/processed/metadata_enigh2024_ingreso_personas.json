@@ -1,0 +1,21 @@
+{
+  "fuente": "INEGI - ENIGH 2024, Nueva Serie (microdatos CSV)",
+  "target": "ingreso_mensual = ingreso corriente monetario trimestral / 3, pesos de agosto 2024",
+  "claves_excluidas": "P050-P066 (percepciones financieras y de capital)",
+  "universo": "personas de 18 años o más con ingreso monetario > 0",
+  "parametros": {
+    "EDAD_MINIMA": 18,
+    "SOLO_INGRESO_POSITIVO": true,
+    "INCLUIR_ACTIVOS_HOGAR": true
+  },
+  "filas": 179557,
+  "columnas": 93,
+  "poblacion_expandida": 77144542.0,
+  "ingreso_mensual_media_ponderada": 10677.636890786778,
+  "ingreso_mensual_mediana_ponderada": 7907.61,
+  "advertencias": [
+    "factor, upm y est_dis son variables de diseño muestral: no usarlas como predictoras.",
+    "Agrupar por upm al separar train/test para no romper los conglomerados.",
+    "Los outliers están marcados (outlier_ingreso), no eliminados."
+  ]
+}
