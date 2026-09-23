@@ -1,0 +1,39 @@
+segmento,modelo,etapa,k,MdAPE,pct_20,MdAE,MAE,RMSE,RMSE_log,R2_log,cobertura_80,segundos,ancho_mediano,razon_sup_inf,conjunto
+Ocupados,Baseline (tabla dinámica),baseline,2,37.38,29.48,3434.0,5933.0,16294.0,0.8854,0.1849,,0.0,,,validation
+Ocupados,Baseline (tabla dinámica),baseline,2,38.57,27.75,3450.0,5854.0,14227.0,0.9017,0.2063,,0.0,,,test
+No ocupados,Baseline (tabla dinámica),baseline,2,57.82,16.86,2445.0,4557.0,9495.0,1.142,0.0821,,0.0,,,validation
+No ocupados,Baseline (tabla dinámica),baseline,2,59.61,16.47,2406.0,4856.0,11066.0,1.1567,0.0917,,0.0,,,test
+Ocupados,Ridge,tamizaje (defaults),10,33.95,31.04,2709.0,5247.0,15717.0,0.7296,0.4465,,0.4,,,validation
+Ocupados,ElasticNet,tamizaje (defaults),10,34.32,30.15,2764.0,5354.0,16015.0,0.7455,0.422,,0.7,,,validation
+Ocupados,SGD (Huber),tamizaje (defaults),10,34.27,30.85,2796.0,5419.0,16253.0,0.7768,0.3725,,0.5,,,validation
+Ocupados,Red neuronal (MLP),tamizaje (defaults),10,32.02,32.71,2572.0,5024.0,15403.0,0.7059,0.4818,,3.2,,,validation
+Ocupados,Árbol de decisión,tamizaje (defaults),10,33.24,31.66,2702.0,5194.0,15651.0,0.7323,0.4423,,0.2,,,validation
+Ocupados,Random Forest,tamizaje (defaults),10,32.09,33.66,2628.0,5058.0,15541.0,0.7144,0.4693,,2.0,,,validation
+Ocupados,Extra Trees,tamizaje (defaults),10,32.06,33.69,2598.0,5063.0,15635.0,0.7127,0.4718,,1.4,,,validation
+Ocupados,HistGradientBoosting,tamizaje (defaults),10,30.56,35.25,2509.0,4932.0,15374.0,0.7051,0.483,,1.0,,,validation
+Ocupados,LightGBM,tamizaje (defaults),10,30.74,34.77,2513.0,4911.0,15221.0,0.7038,0.485,,1.2,,,validation
+Ocupados,XGBoost,tamizaje (defaults),10,30.35,35.04,2500.0,4923.0,15154.0,0.7056,0.4823,,3.0,,,validation
+No ocupados,Ridge,tamizaje (defaults),7,47.02,20.85,1599.0,3602.0,8613.0,0.8997,0.4303,,0.1,,,validation
+No ocupados,ElasticNet,tamizaje (defaults),7,47.4,21.58,1610.0,3605.0,8642.0,0.9035,0.4254,,0.2,,,validation
+No ocupados,SGD (Huber),tamizaje (defaults),7,48.69,21.02,1679.0,3673.0,8733.0,0.9292,0.3924,,0.2,,,validation
+No ocupados,Red neuronal (MLP),tamizaje (defaults),7,45.04,24.37,1460.0,3481.0,8448.0,0.8779,0.4575,,2.5,,,validation
+No ocupados,Árbol de decisión,tamizaje (defaults),7,43.38,25.26,1525.0,3490.0,8500.0,0.8908,0.4414,,0.1,,,validation
+No ocupados,Random Forest,tamizaje (defaults),7,42.75,25.39,1491.0,3438.0,8468.0,0.8746,0.4616,,0.8,,,validation
+No ocupados,Extra Trees,tamizaje (defaults),7,42.39,24.26,1498.0,3444.0,8453.0,0.8734,0.4631,,0.6,,,validation
+No ocupados,HistGradientBoosting,tamizaje (defaults),7,41.45,26.31,1422.0,3394.0,8440.0,0.8742,0.4621,,0.4,,,validation
+No ocupados,LightGBM,tamizaje (defaults),7,41.92,26.43,1419.0,3399.0,8457.0,0.8755,0.4605,,0.6,,,validation
+No ocupados,XGBoost,tamizaje (defaults),7,42.27,25.84,1426.0,3401.0,8442.0,0.8727,0.464,,1.6,,,validation
+Ocupados,XGBoost,tuneado (random),10,29.7,35.75,2458.0,4874.0,15305.0,0.7011,0.4889,,342.0,,,validation
+Ocupados,HistGradientBoosting,tuneado (random),10,29.84,35.58,2430.0,4893.0,15317.0,0.7016,0.4881,,94.0,,,validation
+No ocupados,HistGradientBoosting,tuneado (random),7,41.56,25.45,1427.0,3379.0,8429.0,0.8744,0.4618,,34.0,,,validation
+No ocupados,LightGBM,tuneado (random),7,41.81,25.99,1400.0,3368.0,8399.0,0.8714,0.4655,,58.0,,,validation
+Ocupados,XGBoost,tuneado (random+grid),10,29.64,35.77,2442.0,4869.0,15328.0,0.701,0.4889,,39.0,,,validation
+No ocupados,HistGradientBoosting,tuneado (random+grid),7,41.56,25.45,1427.0,3379.0,8429.0,0.8744,0.4618,,3.0,,,validation
+Ocupados,XGBoost · ponderado por factor,tuneado (random+grid),10,29.99,35.53,2457.0,4879.0,15330.0,0.7035,0.4854,,,,,validation
+No ocupados,HistGradientBoosting · ponderado por factor,tuneado (random+grid),7,41.94,26.48,1466.0,3390.0,8440.0,0.8763,0.4596,,,,,validation
+Ocupados,XGBoost · q50 (final),cuantil,10,29.68,35.61,2437.0,4872.0,15335.0,0.7009,0.4891,,,,,validation
+No ocupados,HistGradientBoosting · q50 (final),cuantil,7,41.56,25.45,1427.0,3379.0,8429.0,0.8744,0.4618,,,,,validation
+Ocupados,XGBoost · q50 (final),final,10,30.78,34.35,2437.0,4748.0,13105.0,0.7046,0.5153,80.64,,10857.0,3.62,test
+No ocupados,HistGradientBoosting · q50 (final),final,7,41.03,26.18,1413.0,3586.0,9734.0,0.8609,0.4969,81.34,,7027.0,6.04,test
+Ocupados,Notebook 03 (LightGBM sin tunear),referencia,10,30.84,34.32,2479.0,,,,0.5215,,,,,test
+No ocupados,Notebook 03 (LightGBM sin tunear),referencia,7,41.62,25.58,1416.0,,,,0.4988,,,,,test

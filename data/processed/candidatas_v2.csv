@@ -1,0 +1,69 @@
+variable,veredicto,pregunta_al_usuario,tipo,n_niveles,pct_nulos_ocupados,pct_nulos_no_ocup,eta2_ocupados,eta2_no_ocupados
+sinco_grupo,Directa,¿A cuál de estos 10 grupos se parece más tu ocupación?,categórica,11,0.0,0.0,0.2134,0.0
+tiene_contrato_escrito,Directa,¿Tienes contrato por escrito?,numérica,2,24.9,100.0,0.1937,0.0
+formalidad,Directa,¿Tu trabajo te da IMSS/ISSSTE y prestaciones?,categórica,4,0.0,0.0,0.1878,0.0
+contrato_indefinido,Directa,¿Tu contrato es por tiempo indefinido o temporal?,numérica,2,62.8,100.0,0.1871,0.0
+horas_trabajadas,Directa,¿Cuántas horas trabajaste la semana pasada?,numérica,138,0.0,100.0,0.1734,0.0
+tam_empresa_grupo,Directa,¿Cuántas personas trabajan donde trabajas tú?,categórica,5,0.0,0.0,0.1676,0.0
+clase_empleador,Directa,"¿Trabajas para una empresa privada, el gobierno, u otro?",categórica,5,0.0,0.0,0.1655,0.0
+anios_escolaridad,Directa,¿Cuál es el último grado que aprobaste? (nivel + grado),numérica,25,0.0,0.0,0.1501,0.0966
+sector_agrupado,Directa,¿En qué sector trabajas? (8 opciones),categórica,10,0.0,0.0,0.1453,0.0
+jornada,Directa,¿Cuántas horas trabajas a la semana? (parcial / completa / más de 48),categórica,4,0.0,0.0,0.1363,0.0
+posicion_ocupacion,Directa,"En tu trabajo, ¿eres empleado, patrón, trabajas por tu cuenta o sin pago?",categórica,6,0.0,0.0,0.121,0.0
+tamanio_localidad,Directa,"¿Vives en una ciudad grande, una ciudad media, un pueblo o una zona rural?",categórica,4,0.0,0.0,0.1,0.0568
+hijos_sobrevivientes,Directa,¿Cuántos hijos tienes?,numérica,20,68.7,42.8,0.0581,0.0195
+es_mujer,Directa,¿Cuál es tu sexo?,numérica,2,0.0,0.0,0.0442,0.0414
+es_jefe_hogar,Directa,¿Eres la persona principal responsable de tu hogar?,numérica,2,0.0,0.0,0.0432,0.1473
+se_considera_indigena,Directa,¿Te consideras indígena?,numérica,2,0.0,0.0,0.0408,0.0157
+habla_lengua_indigena,Directa,¿Hablas alguna lengua indígena?,numérica,2,0.0,0.0,0.0396,0.0126
+edad,Directa,¿Cuántos años tienes?,numérica,88,0.0,0.0,0.0331,0.1259
+integrantes_hogar,Directa,¿Cuántas personas viven en tu hogar?,numérica,19,0.0,0.0,0.0153,0.0568
+lugar_nacimiento,Directa,¿Naciste en el estado donde vives ahora?,categórica,4,0.0,0.0,0.0142,0.0143
+situacion_conyugal,Directa,¿Cuál es tu situación conyugal?,categórica,6,0.0,0.0,0.0078,0.0473
+tiene_discapacidad,Directa,¿Tienes alguna discapacidad o dificultad severa?,numérica,2,0.0,0.0,0.0054,0.0014
+asiste_a_escuela,Directa,¿Estás estudiando actualmente?,numérica,2,0.0,0.0,0.0016,0.0242
+n_trabajos,Directa,¿Cuántos trabajos tienes?,numérica,3,0.0,0.0,0.0013,0.0
+tiene_trabajo_secundario,Directa,¿Tienes un segundo trabajo?,numérica,2,0.0,0.0,0.0013,0.0
+es_afrodescendiente,Directa,¿Te consideras afrodescendiente?,numérica,2,0.0,0.0,0.0001,0.0001
+actividad_no_ocupado,Directa,"Si no trabajaste, ¿a qué te dedicaste? (jubilado, estudiante, hogar…)",categórica,6,100.0,0.0,0.0,0.3511
+tiene_trabajo_principal,Directa,¿Trabajaste el mes pasado?  [ruteo entre los dos modelos],numérica,2,0.0,0.0,0.0,0.0
+n_prestaciones,Derivada,de 'formalidad'; el conteo exacto nadie lo recuerda,numérica,20,0.0,100.0,0.205,0.0
+tam_empresa,Derivada,de 'tam_empresa_grupo',numérica,11,2.2,100.0,0.1921,0.0
+empleo_formal,Derivada,de 'formalidad',numérica,2,0.0,100.0,0.1814,0.0
+cotiza_seguridad_social,Derivada,de 'formalidad',numérica,2,0.0,0.0,0.1704,0.1894
+scian_sector,Derivada,de 'sector_agrupado',categórica,22,0.0,0.0,0.1618,0.0
+cve_entidad,Derivada,Estado de residencia — de la ubicación o del código postal,categórica,32,0.0,0.0,0.103,0.0395
+experiencia_potencial,Derivada,edad − años de escolaridad − 6,numérica,100,0.0,0.0,0.0412,0.106
+sin_prestaciones,Derivada,de 'formalidad',numérica,2,0.0,100.0,0.0373,0.0
+es_migrante_interno,Derivada,de 'lugar_nacimiento',numérica,2,0.0,0.0,0.0135,0.0132
+razon_dependencia,Derivada,de tamaño del hogar y número de menores/adultos mayores,numérica,56,0.0,0.0,0.0038,0.0321
+cve_municipio,No preguntable,"1,112 municipios; además localiza demasiado al usuario",categórica,1112,0.0,0.0,0.1856,0.1342
+estrato_socioeconomico,No preguntable,"estrato de la manzana, asignado por INEGI",categórica,4,0.0,0.0,0.141,0.109
+educacion_jefe,No preguntable,sobre otra persona del hogar,categórica,11,0.0,0.0,0.1396,0.0679
+tipo_actividad_negocio,No preguntable,redundante con 'sector_agrupado',categórica,10,0.0,0.0,0.1056,0.0
+tiene_socios,No preguntable,83% de faltantes,numérica,2,79.1,100.0,0.0957,0.0
+material_piso,No preguntable,nadie describe su piso en un formulario,categórica,3,0.0,0.0,0.0913,0.0732
+agua_entubada_dentro,No preguntable,"infraestructura, no autorreporte",numérica,2,0.0,0.0,0.0848,0.0541
+tiene_computadora,No preguntable,activo del hogar,numérica,2,0.0,0.0,0.0773,0.0258
+n_automoviles,No preguntable,activo del hogar,numérica,10,0.0,0.0,0.0731,0.036
+tiene_tarjeta_credito,No preguntable,activo financiero; bordea el target,numérica,2,0.0,0.0,0.0682,0.0332
+tiene_internet,No preguntable,activo del hogar; correlaciona con el target por construcción,numérica,2,0.0,0.0,0.0667,0.0305
+drenaje_publico,No preguntable,"infraestructura, no autorreporte",numérica,2,0.0,0.0,0.0621,0.0347
+parentesco_grupo,No preguntable,requiere describir el hogar completo,categórica,5,0.0,0.0,0.0483,0.1591
+hacinamiento,No preguntable,requiere contar cuartos,numérica,114,0.0,0.0,0.0471,0.1139
+tenencia_vivienda,No preguntable,"posible, pero fricción alta para la señal que aporta",categórica,6,0.0,0.0,0.0356,0.005
+ocupados_hogar,No preguntable,composición del hogar,numérica,12,0.0,0.0,0.0352,0.0815
+sabe_leer_escribir,No preguntable,implícito si está llenando un formulario,numérica,2,0.0,0.0,0.0278,0.0175
+num_cuartos,No preguntable,friccional y poco creíble como autorreporte,numérica,19,0.0,0.0,0.0277,0.0376
+tipo_vivienda,No preguntable,clasificación del entrevistador,categórica,7,0.1,0.1,0.0211,0.013
+perceptores_hogar,No preguntable,composición del hogar; además bordea el target,numérica,14,0.0,0.0,0.0205,0.0418
+tiene_celular,No preguntable,activo del hogar; casi constante,numérica,2,0.0,0.0,0.0147,0.0015
+edad_jefe,No preguntable,sobre otra persona del hogar,numérica,90,0.0,0.0,0.0132,0.0673
+clase_hogar,No preguntable,"clasificación del censo, no del usuario",categórica,5,0.0,0.0,0.0131,0.0265
+num_dormitorios,No preguntable,friccional y poco creíble como autorreporte,numérica,11,0.0,0.0,0.0064,0.0047
+n_dificultades,No preguntable,se prefiere la binaria 'tiene_discapacidad',numérica,9,0.0,0.0,0.0057,0.0025
+menores_hogar,No preguntable,composición del hogar,numérica,10,0.0,0.0,0.0052,0.0352
+adultos_mayores_hogar,No preguntable,composición del hogar,numérica,6,0.0,0.0,0.0048,0.0358
+trabaja_en_mexico,No preguntable,casi constante (99.7%),numérica,2,0.0,100.0,0.0038,0.0
+tiene_electricidad,No preguntable,casi constante (99%),numérica,2,0.0,0.0,0.0017,0.0007
+jefe_mujer,No preguntable,sobre otra persona del hogar,numérica,2,0.0,0.0,0.0001,0.0045

@@ -1,0 +1,29 @@
+# Todo lo que no debe entrar al contexto de build.
+# Sin esto, Docker sube ~700 MB de microdatos y notebooks al daemon en cada build,
+# y cualquier cambio en un notebook invalida la caché de capas.
+
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.ipynb_checkpoints
+
+notebooks/
+reports/
+data/
+mlruns/
+*.ipynb
+
+# los modelos sí entran, pero sólo los que sirve la API
+models/*.md
+
+.env
+*.log
+Dockerfile
+.dockerignore
+README.md

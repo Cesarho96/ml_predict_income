@@ -1,3 +1,36 @@
+# ---------------------------------------------------------------- entornos
 .venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------- datos
+# Microdatos crudos del INEGI: públicos, ~700 MB, se descargan aparte.
 data/raw/
-*.csv
+
+# Los datos procesados son DERIVADOS: el notebook 01 los regenera de forma
+# determinista a partir de data/raw/. Git guarda cada versión para siempre, así que
+# 12 MB de parquet recommiteados en cada corrida crecen sin techo y no se pueden
+# borrar sin reescribir la historia.
+data/processed/*.parquet
+data/processed/*.csv
+
+# ...salvo los que son DECISIONES, no datos. Definen particiones y contratos, pesan
+# kilobytes, y sin ellos los números de los notebooks dejan de ser auditables:
+# quién quedó en train, qué variables entraron, qué significa cada columna.
+!data/processed/split_upm.csv
+!data/processed/split_upm_3way.csv
+!data/processed/candidatas_v2.csv
+!data/processed/diccionario_enigh2024_ingreso_personas.csv
+
+# ---------------------------------------------------------------- MLflow (Hito 2)
+# Los artefactos y las corridas viven en el registry, no en el repo.
+mlruns/
+mlartifacts/
+
+# ---------------------------------------------------------------- ruido
+.env
+*.log

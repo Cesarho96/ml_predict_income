@@ -1,0 +1,30 @@
+# Dependencias de SERVICIO. Nada más.
+#
+# Versiones clavadas a las que produjeron los bundles: un pickle de scikit-learn no es
+# estable entre versiones menores, así que un `pip install -U` silencioso es una de las
+# formas más comunes de romper un modelo en producción. Las mismas versiones están
+# dentro del bundle (`versiones_entrenamiento`) y la API las verifica al arrancar.
+#
+# Sólo dependencias DIRECTAS. El lockfile completo (con transitivas) es específico por
+# plataforma —uvloop no tiene wheel para Windows, por ejemplo— así que se genera dentro
+# del build de Docker, no a mano. Eso llega en el Hito 4.
+#
+# Nota de tamaño: el modelo ganador es HistGradientBoosting, de scikit-learn, así que la
+# imagen NO necesita lightgbm ni xgboost aunque se usaran en el notebook 04. ~250 MB menos.
+
+scikit-learn==1.8.0
+numpy==2.4.4
+pandas==3.0.2
+scipy==1.17.1
+joblib==1.5.3
+
+# pyarrow NO se importa en ningún archivo de este repo, pero es OBLIGATORIO en runtime:
+# `ACategorias` guarda las categorías como `pd.Index` y en pandas 3.0 un Index de strings
+# está respaldado por Arrow, así que deserializar el bundle lo exige. Sin esta línea la
+# imagen construye bien y truena al arrancar con `ModuleNotFoundError: No module named
+# 'pyarrow'`. Las dependencias de un pickle no aparecen en los imports del código.
+pyarrow==25.0.1
+
+fastapi==0.141.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
