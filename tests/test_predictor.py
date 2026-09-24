@@ -57,14 +57,15 @@ def test_deteccion_de_desajuste_de_versiones():
     assert len(problemas) == 1 and "scikit-learn" in problemas[0]
 
 
-def test_pyarrow_es_dependencia_real_aunque_no_se_importe():
-    """pyarrow no aparece en ningún import del repo, pero sin él el bundle no carga.
+def test_las_categorias_no_arrastran_arrow():
+    """Las categorías deben ser listas de Python, no `pd.Index`.
 
-    En pandas 3.0 las categorías guardadas como `pd.Index` de strings viven sobre
-    Arrow. Si alguien lo quita de requirements.txt, la imagen construye y truena al
-    arrancar — esta prueba lo convierte en un fallo de CI.
+    Historia: guardarlas como `pd.Index` metía pyarrow (~150 MB) en la imagen de
+    servicio, porque en pandas 3.0 un Index de strings vive sobre Arrow. Una lista hace
+    exactamente lo mismo. Esta prueba impide que la optimización se revierta sin querer.
     """
-    import importlib.util
-
-    assert importlib.util.find_spec("pyarrow") is not None, (
-        "pyarrow falta: el bundle no se puede deserializar sin él")
+    p = Predictor().cargar()
+    prep = p.bundles["ocupados"].cuantiles["0.5"].named_steps["prep"]
+    for col, valores in prep.categorias_.items():
+        assert isinstance(valores, list), (
+            f"'{col}' guarda {type(valores).__name__}; debe ser list o vuelve pyarrow")

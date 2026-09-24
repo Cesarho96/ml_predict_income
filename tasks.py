@@ -79,6 +79,17 @@ def api():
     corre(PY, "-m", "uvicorn", "app.main:app", "--reload", "--port", PUERTO)
 
 
+@tarea("entrena y registra los modelos en MLflow")
+def train():
+    corre(PY, "-m", "src.train")
+
+
+@tarea("abre la UI de MLflow en http://127.0.0.1:5000")
+def mlflow_ui():
+    corre(PY, "-m", "mlflow", "ui", "--backend-store-uri",
+          f"sqlite:///{RAIZ / 'mlflow.db'}", "--port", "5000")
+
+
 @tarea("construye la imagen de Docker")
 def build():
     corre("docker", "build", "-t", f"{IMAGEN}:{TAG}", ".")

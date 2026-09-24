@@ -27,9 +27,10 @@ data/processed/*.csv
 !data/processed/diccionario_enigh2024_ingreso_personas.csv
 
 # ---------------------------------------------------------------- MLflow (Hito 2)
-# Los artefactos y las corridas viven en el registry, no en el repo.
+# Las corridas y los artefactos viven en el registry, no en el repo.
 mlruns/
 mlartifacts/
+mlflow.db
 
 # ---------------------------------------------------------------- ruido
 .env

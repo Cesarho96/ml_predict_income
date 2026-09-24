@@ -18,13 +18,6 @@ pandas==3.0.2
 scipy==1.17.1
 joblib==1.5.3
 
-# pyarrow NO se importa en ningún archivo de este repo, pero es OBLIGATORIO en runtime:
-# `ACategorias` guarda las categorías como `pd.Index` y en pandas 3.0 un Index de strings
-# está respaldado por Arrow, así que deserializar el bundle lo exige. Sin esta línea la
-# imagen construye bien y truena al arrancar con `ModuleNotFoundError: No module named
-# 'pyarrow'`. Las dependencias de un pickle no aparecen en los imports del código.
-pyarrow==25.0.1
-
 fastapi==0.141.1
 uvicorn[standard]==0.46.0
 pydantic==2.13.3

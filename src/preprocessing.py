@@ -38,8 +38,13 @@ class ACategorias(BaseEstimator, TransformerMixin):
 
     def fit(self, X: pd.DataFrame, y=None) -> ACategorias:
         self.cat_ = list(self.cat)
+        # Listas de Python, NO pd.Index. En pandas 3.0 un Index de strings está
+        # respaldado por Arrow, así que guardarlo aquí mete pyarrow —unos 150 MB— en
+        # la imagen de servicio, sólo para conservar tres docenas de cadenas.
+        # `pd.Categorical` acepta una lista igual de bien. Una decisión invisible en un
+        # notebook que cuesta 150 MB en cada pull y en cada arranque de pod.
         self.categorias_ = {
-            c: pd.Index(sorted(X[c].astype(str).dropna().unique())) for c in self.cat_
+            c: sorted(X[c].astype(str).dropna().unique().tolist()) for c in self.cat_
         }
         self.feature_names_in_ = np.asarray(X.columns)
         return self
