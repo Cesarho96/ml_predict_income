@@ -13,48 +13,60 @@ Detalle de decisiones y métricas: `models/MODEL_CARD.md`.
 
 ## Arranque rápido
 
-Requiere **Python 3.11**. Las versiones están clavadas a las que serializaron los
-modelos: un pickle de scikit-learn no es portable entre versiones menores, así que un
-`pip install -U` rompe la carga.
+Requiere **Python 3.11** y **Docker**. Las versiones están clavadas a las que
+serializan los modelos: un pickle de scikit-learn no es portable entre versiones
+menores.
 
 ```bash
 python -m venv .venv
 # Windows:  .venv\Scripts\activate
 # Linux/macOS:  source .venv/bin/activate
 pip install -r requirements-dev.txt
-
-python tasks.py test      # 14 pruebas
-python tasks.py api       # API en http://127.0.0.1:8000/docs
-python tasks.py smoke     # en otra terminal
+python tasks.py test                   # no necesita Docker, MLflow ni datos
 ```
 
-`python tasks.py` sin argumentos lista todas las tareas. No hace falta `make`:
-el ejecutor es Python puro y corre igual en Windows, Linux y en CI.
+## De cero a una API sirviendo (Hito 3)
 
-## Con Docker
+El modelo **no está en el repo ni en la imagen**: vive en el registry de MLflow y la
+API lo descarga al arrancar, por alias.
 
 ```bash
-python tasks.py build
-python tasks.py run       # con --read-only, sin capabilities, 1 CPU, 1 GB
+python tasks.py mlflow                 # registry + UI en http://127.0.0.1:5000
+python tasks.py train                  # entrena en contenedor Linux y REGISTRA (sin promover)
+python tasks.py promover ocupados 1    # champion → v1   (o desde la UI de MLflow)
+python tasks.py promover no_ocupados 1
+python tasks.py up                     # API en http://127.0.0.1:8000/docs, espera a /ready
 python tasks.py smoke
-python tasks.py inspect   # tamaño de la imagen y usuario (debe ser uid 10001, no root)
 ```
+
+Registrar no es desplegar: una versión nueva no tiene alias y nadie la sirve hasta que
+alguien la promueve. Los contenedores vivos no cambian al mover el alias —lo leen al
+arrancar—, así que para que un cambio llegue: `docker compose restart api`. Rollback es
+lo mismo con la versión anterior.
+
+`train` necesita `data/processed/` (lo generan los notebooks 01–02); se monta en sólo
+lectura, no se copia a la imagen.
+
+`python tasks.py` sin argumentos lista todas las tareas.
 
 ## Estructura
 
 ```
-src/         código importable: preprocesamiento y predicción
-app/         capa HTTP (FastAPI). Sólo traduce; la lógica vive en src/
-models/      bundles serializados + contrato de features + model card
-notebooks/   01 dataset · 02 EDA · 03 selección · 04 modelado
-scripts/     utilidades de mantenimiento
-tests/       pruebas
+src/                código importable: modelo, preprocesamiento, predicción, entrenamiento
+app/                capa HTTP (FastAPI). Sólo traduce; la lógica vive en src/
+docker/mlflow/      imagen del servidor de MLflow
+docker-compose.yml  mlflow + train + api
+models/             model card (los modelos viven en el registry)
+notebooks/          01 dataset · 02 EDA · 03 selección · 04 modelado
+scripts/            promover.py: mueve aliases del registry
+tests/              pruebas, con modelos sintéticos: corren sin datos ni registry
 ```
 
 ## Nota sobre los modelos
 
-Los bundles llevan dentro el contrato de entrada (tipos, valores admitidos y la
-pregunta que hace el formulario) y las versiones con las que se serializaron. La API
-valida contra ese contrato, así que el formulario y el modelo no pueden separarse.
+Cada modelo registrado lleva dentro el contrato de entrada (tipos, valores admitidos y
+la pregunta del formulario) y las versiones con las que se serializó. La API valida
+contra ese contrato, así que el formulario y el modelo no pueden separarse.
 
-`GET /contrato/{segmento}` lo expone en vivo.
+`GET /contrato/{segmento}` lo expone en vivo; `GET /ready` dice qué versión exacta
+sirve cada réplica, y cada respuesta de `/predict` trae `version_modelo`.

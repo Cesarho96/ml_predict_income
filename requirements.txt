@@ -1,9 +1,10 @@
 # Dependencias de SERVICIO. Nada más.
 #
-# Versiones clavadas a las que produjeron los bundles: un pickle de scikit-learn no es
+# Versiones clavadas a las que producen los modelos: un pickle de scikit-learn no es
 # estable entre versiones menores, así que un `pip install -U` silencioso es una de las
-# formas más comunes de romper un modelo en producción. Las mismas versiones están
-# dentro del bundle (`versiones_entrenamiento`) y la API las verifica al arrancar.
+# formas más comunes de romper un modelo en producción. Las mismas versiones viajan
+# dentro del modelo registrado (`versiones_entrenamiento`) y la API las verifica al
+# arrancar. requirements-train.txt parte de este archivo: no pueden divergir.
 #
 # Sólo dependencias DIRECTAS. El lockfile completo (con transitivas) es específico por
 # plataforma —uvloop no tiene wheel para Windows, por ejemplo— así que se genera dentro
@@ -21,3 +22,9 @@ joblib==1.5.3
 fastapi==0.141.1
 uvicorn[standard]==0.46.0
 pydantic==2.13.3
+
+# Hito 3: el cliente de MLflow para bajar el modelo del registry al arrancar.
+# `-skinny` es el cliente sin servidor, sin UI y sin pyarrow. Aun así suma ~90 MB
+# (databricks-sdk, opentelemetry, cryptography…): es el precio de desacoplar el modelo
+# de la imagen. Lo pagan en parte los ~150 MB que se quitaron en el Hito 2.
+mlflow-skinny==3.16.1

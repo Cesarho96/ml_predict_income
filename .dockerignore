@@ -16,11 +16,17 @@ __pycache__
 notebooks/
 reports/
 data/
-mlruns/
 *.ipynb
 
-# los modelos sí entran, pero sólo los que sirve la API
-models/*.md
+# Hito 3: ningún modelo entra a la imagen; se descargan del registry al arrancar.
+models/
+mlruns/
+mlartifacts/
+mlflow.db
+tests/
+scripts/
+docker/
+docker-compose.yml
 
 .env
 *.log

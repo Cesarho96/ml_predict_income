@@ -1,0 +1,8 @@
+# Dependencias de ENTRENAMIENTO: las de servicio + lo que sólo hace falta para entrenar.
+#
+# Partir de requirements.txt garantiza que sklearn/numpy/pandas son las mismas con
+# las que se va a servir: un pickle de sklearn no es portable entre versiones menores.
+-r requirements.txt
+
+# Leer el parquet. En servicio no hace falta (y son ~150 MB): ver Hito 2.
+pyarrow==25.0.1

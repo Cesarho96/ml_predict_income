@@ -31,10 +31,12 @@ def test_health_no_depende_de_los_modelos(client):
     assert client.get("/health").status_code == 200
 
 
-def test_ready_reporta_los_dos_modelos(client):
+def test_ready_reporta_los_dos_modelos_y_su_version(client):
     r = client.get("/ready")
     assert r.status_code == 200
-    assert set(r.json()["modelos"]) == {"ocupados", "no_ocupados"}
+    modelos = r.json()["modelos"]
+    assert set(modelos) == {"ocupados", "no_ocupados"}
+    assert all("version" in m and "uri" in m for m in modelos.values())
 
 
 @pytest.mark.parametrize("payload,segmento", [(OCUPADO, "ocupados"),
@@ -47,6 +49,8 @@ def test_predict_devuelve_intervalo_ordenado(client, payload, segmento):
     assert d["inferior"] < d["mediana"] < d["superior"]
     assert d["inferior"] > 0
     assert d["moneda"] == "MXN"
+    # Cada respuesta dice qué modelo la produjo: es lo que hará atribuible el drift.
+    assert d["version_modelo"].startswith(f"ingreso_{segmento}/")
 
 
 def test_categoria_desconocida_es_422_no_500(client):

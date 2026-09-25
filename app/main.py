@@ -1,7 +1,7 @@
 """API de predicción de ingreso — capa HTTP.
 
 Diseño: esta capa sólo traduce. Valida la entrada contra el contrato que el propio
-bundle trae, llama a `Predictor` y formatea la salida. Cero lógica de negocio aquí.
+modelo trae, llama a `Predictor` y formatea la salida. Cero lógica de negocio aquí.
 """
 
 from __future__ import annotations
@@ -29,10 +29,13 @@ predictor = Predictor()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Cargar en el arranque, no en la primera petición: así el primer usuario no paga
-    # el costo y `/ready` puede decir la verdad sobre si el pod sirve o no.
-    log.info("cargando modelos…")
+    # el costo y `/ready` puede decir la verdad sobre si el pod sirve o no. Si el
+    # registry no responde o no hay champion, esto lanza y el proceso termina: el
+    # orquestador lo ve y lo reinicia. Ver la decisión 3 en src/predictor.py.
+    log.info("resolviendo y cargando modelos…")
     predictor.cargar()
-    log.info("modelos listos")
+    log.info("modelos listos: %s",
+             ", ".join(m.etiqueta for m in predictor.modelos.values()))
     yield
     log.info("apagando")
 
@@ -51,7 +54,7 @@ app = FastAPI(
 
 # --------------------------------------------------------------------- esquemas
 class PeticionPrediccion(BaseModel):
-    """Los campos se validan contra el contrato que trae el bundle del modelo.
+    """Los campos se validan contra el contrato que viaja dentro del modelo registrado.
 
     Una sola fuente de verdad: si el modelo se reentrena con otras categorías, el
     contrato cambia con él y la API deja de aceptar lo que el modelo ya no conoce.
@@ -86,7 +89,7 @@ class PeticionPrediccion(BaseModel):
         seg = segmento_de(self.trabajo_mes_pasado)
         if not predictor.listo:
             return self  # el arranque aún no termina; /ready lo reporta
-        b = predictor.bundles[seg]
+        b = predictor.modelos[seg]
 
         faltan = [f for f in b.features if getattr(self, f, None) is None]
         if faltan:
@@ -134,21 +137,25 @@ def ready():
     """
     if not predictor.listo:
         raise HTTPException(status_code=503, detail="modelos no cargados")
+    # Qué versión EXACTA sirve este pod. Con varias réplicas y un alias que se mueve,
+    # es la única forma de saber quién respondió qué.
     return {
         "status": "ready",
-        "modelos": {s: {"familia": b.familia, "features": len(b.features),
-                        "version": b.version}
-                    for s, b in predictor.bundles.items()},
+        "modelos": {s: {"nombre": m.nombre, "version": m.version, "alias": m.alias,
+                        "uri": m.uri, "run_id": m.run_id, "familia": m.familia,
+                        "features": len(m.features)}
+                    for s, m in predictor.modelos.items()},
     }
 
 
 @app.get("/contrato/{segmento}", tags=["contrato"])
 def contrato(segmento: str):
     """El contrato de entrada, tal como lo trae el modelo. Útil para construir el formulario."""
-    if segmento not in predictor.bundles:
+    if segmento not in predictor.modelos:
         raise HTTPException(404, f"segmento desconocido: {segmento}")
-    b = predictor.bundles[segmento]
-    return {"segmento": b.segmento, "features": b.features, "contrato": b.contrato}
+    m = predictor.modelos[segmento]
+    return {"segmento": m.segmento, "modelo": m.etiqueta, "features": m.features,
+            "contrato": m.contrato}
 
 
 @app.post("/predict", response_model=RespuestaPrediccion, tags=["predicción"])

@@ -1,10 +1,9 @@
--r requirements.txt
+-r requirements-train.txt
 
 pytest==9.1.1
 httpx==0.28.1
 ruff==0.16.8
 
-# MLflow es de ENTRENAMIENTO, no de servicio: la imagen no lo lleva. Cuando el Hito 3
-# haga que el contenedor lea del registry, sólo entrará `mlflow-skinny` (el cliente,
-# sin servidor ni UI), no este paquete completo.
+# MLflow completo (con servidor y UI) sólo en desarrollo: las pruebas de registry usan
+# un backend SQLite, que el cliente `-skinny` de la imagen no trae.
 mlflow==3.16.1

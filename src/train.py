@@ -1,7 +1,15 @@
 """Entrena, evalúa y registra los dos modelos. Reproduce el notebook 04 sin exploración.
 
-    python -m src.train                 # entrena y registra
+    python tasks.py train               # la forma canónica: en contenedor Linux
+    python -m src.train                 # directo, contra $MLFLOW_TRACKING_URI
     python -m src.train --sin-registrar # sólo loggea la corrida
+
+Dónde se entrena importa. El Hito 3 demostró que el mismo commit, los mismos datos, la
+misma semilla y las mismas versiones de librerías dan un modelo DISTINTO en Windows y
+en Linux: scikit-learn ordena las categorías con el `qsort` de la librería C del
+sistema, y glibc y la de Microsoft desempatan distinto. Por eso el entrenamiento
+canónico corre en el contenedor `train` (la misma base Linux que sirve) y cada corrida
+queda etiquetada con su plataforma.
 
 Lo que este script NO hace, a propósito:
 
@@ -20,6 +28,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+import platform
 import subprocess
 import tempfile
 import time
@@ -32,15 +42,15 @@ from mlflow.models import infer_signature
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.pipeline import Pipeline
 
-from src.model import ALFAS, ModeloIngreso, ejemplo_de_entrada
+from src.model import ALFAS, ModeloIngreso, derivar_contrato, ejemplo_de_entrada
 from src.preprocessing import ACategorias
+from src.validacion import validar
 
 logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("train")
 
 RAIZ = Path(__file__).resolve().parent.parent
 PROC = RAIZ / "data" / "processed"
-MODELOS = RAIZ / "models"
 TARGET = "ingreso_mensual"
 COBERTURA_OBJETIVO = 0.80
 
@@ -59,7 +69,6 @@ SEGMENTOS = {
     "ocupados": {
         "nombre_mlflow": "ingreso_ocupados",
         "contrato": "features_ocupados.json",
-        "bundle": "modelo_ocupados_v1.joblib",
         "etiqueta": "Ocupados",
         "params": {"min_samples_leaf": 40, "max_leaf_nodes": 127, "max_iter": 300,
                    "learning_rate": 0.08, "l2_regularization": 0, "random_state": 0},
@@ -67,7 +76,6 @@ SEGMENTOS = {
     "no_ocupados": {
         "nombre_mlflow": "ingreso_no_ocupados",
         "contrato": "features_no_ocupados.json",
-        "bundle": "modelo_no_ocupados_v1.joblib",
         "etiqueta": "No ocupados",
         "params": {"min_samples_leaf": 80, "max_leaf_nodes": 63, "max_iter": 300,
                    "learning_rate": 0.12, "l2_regularization": 0, "random_state": 0},
@@ -101,6 +109,9 @@ def metricas(y, pred, w) -> dict[str, float]:
 
 
 def sha_git() -> str:
+    """El commit que produjo el modelo. En el contenedor no hay git: llega por GIT_SHA."""
+    if sha := os.getenv("GIT_SHA", "").strip():
+        return sha
     try:
         return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=RAIZ,
                               capture_output=True, text=True, check=True).stdout.strip()
@@ -139,30 +150,9 @@ def preparar_segmento(df: pd.DataFrame, cfg: dict) -> dict:
 
 
 def construir_contrato(d: dict) -> list[dict]:
-    """Deriva el contrato de entrada de las filas de TRAIN, no de un archivo aparte.
-
-    Es la propiedad que importa: los valores que la API acepta son exactamente los que
-    el modelo vio. Si un reentrenamiento cambia las categorías, el contrato cambia con
-    él en la misma corrida. Un contrato escrito a mano se desincroniza el primer día.
-
-    El texto de la pregunta viene de `features_*.json`, que es lo único que no se puede
-    derivar de los datos: lo decidió una persona en el notebook 03.
-    """
+    """El contrato sale de las filas de TRAIN (ver `src.model.derivar_contrato`)."""
     preguntas = {f["variable"]: f.get("pregunta", "") for f in d["spec"]["formulario"]}
-    Xtr = d["X"][d["tr"]]
-    contrato = []
-    for c in d["features"]:
-        if c in d["cat"]:
-            contrato.append({"variable": c, "tipo": "categórica",
-                             "valores": sorted(Xtr[c].dropna().unique().tolist()),
-                             "pregunta": preguntas.get(c, "")})
-        else:
-            contrato.append({"variable": c, "tipo": "numérica",
-                             "min": float(np.nanmin(Xtr[c])), "max": float(np.nanmax(Xtr[c])),
-                             "mediana": float(np.nanmedian(Xtr[c])),
-                             "acepta_nulos": bool(Xtr[c].isna().any()),
-                             "pregunta": preguntas.get(c, "")})
-    return contrato
+    return derivar_contrato(d["X"][d["tr"]], d["cat"], preguntas)
 
 
 # ---------------------------------------------------------------- entrenamiento
@@ -209,21 +199,26 @@ def evaluar(modelo: ModeloIngreso, d: dict, parte: str) -> dict:
 
 # ---------------------------------------------------------------- main
 def configurar_mlflow(experimento: str) -> None:
-    """Backend local: SQLite para metadatos, carpeta para artefactos.
+    """Hacia dónde se registra: `MLFLOW_TRACKING_URI`, o un SQLite local si no hay.
 
-    No es `file:./mlruns`. Dos razones:
-    1. MLflow 3.x puso el file store en modo mantenimiento y lanza excepción.
-    2. Más importante: el **Model Registry nunca funcionó sobre el file store**.
-       Registrar modelos y moverles alias exige un backend con base de datos.
+    Hito 2: SQLite + carpeta local. Funcionó, pero guardó cada artefacto con una ruta
+    ABSOLUTA de la máquina que entrenó (`file:///D:/repositories/...`). Un contenedor
+    Linux no puede abrir eso: el registry existía, pero sólo para una computadora.
 
-    SQLite cumple las dos cosas sin levantar nada: es un archivo. Migrar a Postgres +
-    S3 más adelante es cambiar esta URI, no reescribir el pipeline.
+    Hito 3: un servidor de MLflow con `--serve-artifacts`. Los artefactos se suben y se
+    bajan POR HTTP a través del servidor (`mlflow-artifacts:/...`), así que cualquier
+    cliente que alcance la URL puede usarlos, sin montar discos ni compartir rutas.
+    Cambiar a Postgres + S3 en AWS será cambiar las banderas del servidor, no este código.
     """
-    mlflow.set_tracking_uri(f"sqlite:///{RAIZ / 'mlflow.db'}")
+    uri = os.getenv("MLFLOW_TRACKING_URI", "").strip() or f"sqlite:///{RAIZ / 'mlflow.db'}"
+    mlflow.set_tracking_uri(uri)
     if mlflow.get_experiment_by_name(experimento) is None:
-        mlflow.create_experiment(experimento,
-                                 artifact_location=(RAIZ / "mlartifacts").as_uri())
+        # Con servidor, el servidor decide dónde van los artefactos; con SQLite local,
+        # una carpeta junto al repo.
+        destino = None if uri.startswith("http") else (RAIZ / "mlartifacts").as_uri()
+        mlflow.create_experiment(experimento, artifact_location=destino)
     mlflow.set_experiment(experimento)
+    log.info("MLflow: %s (experimento %s)", uri, experimento)
 
 
 def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None:
@@ -239,7 +234,10 @@ def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None
         with mlflow.start_run(run_name=f"{slug}-{time.strftime('%Y%m%d-%H%M%S')}"):
             mlflow.set_tags({"segmento": slug, "familia": "HistGradientBoosting",
                              "git_sha": sha_git(), "objetivo": "quantile",
-                             "target": "log(ingreso_mensual)"})
+                             "target": "log(ingreso_mensual)",
+                             # Mismo commit ≠ mismo modelo si cambia la plataforma.
+                             "plataforma": platform.system(),
+                             "python": platform.python_version()})
             mlflow.log_params({**cfg["params"], "n_features": len(d["features"]),
                                "cobertura_objetivo": COBERTURA_OBJETIVO,
                                "entrenado_ponderado": False})
@@ -252,8 +250,13 @@ def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None
             mlflow.log_metric("segundos_entrenamiento", round(time.time() - t0, 1))
             mlflow.log_param("factor_conformal", factor)
 
+            versiones = {"scikit-learn": __import__("sklearn").__version__,
+                         "pandas": pd.__version__, "numpy": np.__version__}
             modelo = ModeloIngreso(cuantiles, factor, d["features"], d["contrato"],
-                                   meta={"segmento": cfg["etiqueta"], "version": "v2"})
+                                   meta={"segmento": cfg["etiqueta"],
+                                         "familia": "HistGradientBoosting",
+                                         "cobertura_objetivo": COBERTURA_OBJETIVO,
+                                         "versiones_entrenamiento": versiones})
 
             for parte, etiqueta in (("va", "validation"), ("te", "test")):
                 met = evaluar(modelo, d, parte)
@@ -272,6 +275,13 @@ def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None
             tmp.write_text(json.dumps(d["contrato"], indent=2, ensure_ascii=False),
                            encoding="utf-8")
 
+            # Antes de registrar: un modelo roto no debe llegar al registry, donde
+            # alguien podría promoverlo. Si falla, la excepción corta aquí y la corrida
+            # queda marcada como FAILED en MLflow, sin versión registrada.
+            for ok in validar(modelo, d["X"][d["te"]]):
+                log.info("  ✓ %s", ok)
+            mlflow.set_tag("validacion", "ok")
+
             ejemplo = ejemplo_de_entrada(d["contrato"], d["features"])
             firma = infer_signature(ejemplo, modelo.predict(None, ejemplo))
 
@@ -289,33 +299,24 @@ def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None
                 # es que train.py también viaja dentro del artefacto de servicio.
                 code_paths=[str(RAIZ / "src")],
                 artifacts={"contrato": str(tmp)},
-                pip_requirements=[f"scikit-learn=={__import__('sklearn').__version__}",
-                                  f"pandas=={pd.__version__}",
-                                  f"numpy=={np.__version__}"],
+                pip_requirements=[f"{p}=={v}" for p, v in versiones.items()],
                 registered_model_name=cfg["nombre_mlflow"] if registrar else None,
             )
             mlflow.log_dict(d["contrato"], "contrato.json")
-            log.info("  registrado: %s", info.model_uri)
-
-            # El bundle joblib sigue saliendo para que la imagen del Hito 1 no se rompa.
-            # El Hito 3 lo elimina y el contenedor pasa a leer del registry.
-            import joblib
-            joblib.dump({"segmento": cfg["etiqueta"], "features": d["features"],
-                         "cuantiles": cuantiles, "factor_conformal": factor,
-                         "familia": "HistGradientBoosting", "version": "v2",
-                         "cobertura_objetivo": COBERTURA_OBJETIVO,
-                         "contrato": d["contrato"],
-                         "versiones_entrenamiento": {
-                             "scikit-learn": __import__("sklearn").__version__,
-                             "pandas": pd.__version__, "numpy": np.__version__}},
-                        MODELOS / cfg["bundle"], compress=3)
+            version = getattr(info, "registered_model_version", None)
+            log.info("  registrado: %s%s", cfg["nombre_mlflow"] if registrar else info.model_uri,
+                     f" v{version}" if version else "")
+            # Ya no se escribe ningún .joblib: el registry es la única copia del modelo.
+            # Registrar NO es promover: la versión nueva no tiene alias y nadie la sirve
+            # hasta que una persona (o, en el Hito 8, un gate) la marque como champion.
 
     print("\n" + "=" * 70)
     for slug, met in resumen.items():
         print(f"{slug:<14} MdAPE {met['MdAPE']:.2f}%  RMSE ${met['RMSE']:,.0f}  "
               f"cobertura {met['cobertura_80']:.1f}%")
     print("=" * 70)
-    print(f"mlflow ui --backend-store-uri sqlite:///{RAIZ / 'mlflow.db'}")
+    print(f"Revisa y promueve en {mlflow.get_tracking_uri()}  "
+          "(o: python tasks.py promover <segmento> <versión>)")
 
 
 if __name__ == "__main__":

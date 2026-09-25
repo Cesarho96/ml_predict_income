@@ -1,0 +1,56 @@
+# Entorno local del Hito 3: registry + entrenamiento + API.
+#
+#   python tasks.py mlflow     # levanta sólo MLflow   → http://127.0.0.1:5000
+#   python tasks.py train      # entrena EN CONTENEDOR y registra (sin promover)
+#   python tasks.py promover ocupados 1
+#   python tasks.py up         # API                   → http://127.0.0.1:8000/docs
+#
+# Los puertos se publican sólo en 127.0.0.1: el servidor de MLflow no tiene
+# autenticación, y publicarlo en 0.0.0.0 lo expone a toda tu red local.
+
+name: ml-predict-income
+
+services:
+  mlflow:
+    build: ./docker/mlflow
+    image: ml-predict-income-mlflow:3.16.1
+    ports: ["127.0.0.1:5000:5000"]
+    volumes: ["mlflow-data:/mlflow"]
+    restart: unless-stopped
+
+  train:
+    build: {context: ., target: train}
+    image: ml-predict-income-train:dev
+    profiles: ["train"]            # no arranca con `up`: sólo con `run`
+    depends_on:
+      mlflow: {condition: service_healthy}
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      GIT_SHA: ${GIT_SHA:-desconocido}
+    # Sólo lectura: entrenar no debe poder modificar los datos de los que aprende.
+    volumes: ["./data/processed:/app/data/processed:ro"]
+
+  api:
+    build: {context: ., target: runtime}
+    image: ml-predict-income:${TAG:-dev}
+    depends_on:
+      mlflow: {condition: service_healthy}
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODEL_ALIAS: ${MODEL_ALIAS:-champion}
+      # Por omisión el cliente de MLflow reintenta 7 veces con espera exponencial:
+      # varios minutos antes de rendirse. Al arrancar se prefiere fallar rápido y que
+      # el orquestador reinicie.
+      MLFLOW_HTTP_REQUEST_MAX_RETRIES: "2"
+      MLFLOW_HTTP_REQUEST_TIMEOUT: "15"
+    ports: ["127.0.0.1:${PORT:-8000}:8000"]
+    # Las mismas restricciones que `docker run` usaba en el Hito 1.
+    read_only: true
+    tmpfs: ["/tmp:size=256m"]      # la caché del modelo vive aquí (MODEL_CACHE_DIR)
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+    cpus: 1.0
+
+volumes:
+  mlflow-data:                     # la base y los artefactos sobreviven a `down`

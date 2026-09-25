@@ -75,6 +75,34 @@ class ModeloIngreso(mlflow.pyfunc.PythonModel):
                              "superior": np.round(sup, 2)})
 
 
+def derivar_contrato(X_train: pd.DataFrame, cat: list[str],
+                     preguntas: dict[str, str] | None = None) -> list[dict]:
+    """Deriva el contrato de entrada de las filas de TRAIN, no de un archivo aparte.
+
+    Es la propiedad que importa: los valores que la API acepta son exactamente los que
+    el modelo vio. Si un reentrenamiento cambia las categorías, el contrato cambia con
+    él en la misma corrida. Un contrato escrito a mano se desincroniza el primer día.
+
+    El texto de cada pregunta es lo único que no se deriva de los datos: lo decidió una
+    persona en el notebook 03 y llega en `preguntas`.
+    """
+    preguntas = preguntas or {}
+    contrato = []
+    for c in X_train.columns:
+        if c in cat:
+            contrato.append({"variable": c, "tipo": "categórica",
+                             "valores": sorted(X_train[c].dropna().unique().tolist()),
+                             "pregunta": preguntas.get(c, "")})
+        else:
+            contrato.append({"variable": c, "tipo": "numérica",
+                             "min": float(np.nanmin(X_train[c])),
+                             "max": float(np.nanmax(X_train[c])),
+                             "mediana": float(np.nanmedian(X_train[c])),
+                             "acepta_nulos": bool(X_train[c].isna().any()),
+                             "pregunta": preguntas.get(c, "")})
+    return contrato
+
+
 def ejemplo_de_entrada(contrato: list[dict], features: list[str]) -> pd.DataFrame:
     """Una fila válida derivada del propio contrato.
 

@@ -35,3 +35,6 @@ mlflow.db
 # ---------------------------------------------------------------- ruido
 .env
 *.log
+
+# Hito 3: los modelos viven en el registry de MLflow, no en git ni en la imagen.
+models/*.joblib
