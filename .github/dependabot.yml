@@ -1,0 +1,15 @@
+# Dependabot abre un PR cuando sale una versión nueva de una acción de GitHub, y
+# actualiza el SHA fijado junto con su comentario de versión. El PR pasa por el mismo CI.
+#
+# A propósito NO se incluye `pip`: subir scikit-learn de versión menor rompe la carga de
+# los modelos registrados (Hito 1). Esas actualizaciones se hacen a mano, junto con un
+# reentrenamiento, no como un PR automático.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      acciones:
+        patterns: ["*"]
