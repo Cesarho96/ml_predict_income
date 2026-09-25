@@ -1,0 +1,167 @@
+# CI/CD — Hito 4
+#
+#   PR hacia main   →  lint + pruebas  →  build + checks de la imagen + escaneo   (no publica)
+#   push a main     →  lo mismo        →  … y publica en ECR con tag = commit
+#
+# Orden a propósito: lo barato primero. Ruff tarda segundos y pytest ~1 minuto; construir
+# la imagen tarda varios. Si el código está roto, no se gasta ni un minuto en Docker.
+#
+# Las acciones de terceros van fijadas por SHA de commit, no por tag (`@v7`). Un tag se
+# puede mover; un SHA no. En marzo de 2025 alguien comprometió `tj-actions/changed-files`
+# y movió sus tags a código malicioso: todo repo que usaba `@v45` lo ejecutó. El comentario
+# junto a cada SHA dice qué versión es; Dependabot (.github/dependabot.yml) los actualiza.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Mínimo privilegio por omisión: el GITHUB_TOKEN sólo puede leer el repo.
+permissions:
+  contents: read
+
+# En una rama de PR, un push nuevo cancela la corrida vieja. En main no: cada commit debe
+# terminar y dejar su imagen.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  PYTHON_VERSION: "3.11"          # la misma que la imagen (Dockerfile)
+  IMAGEN_LOCAL: ml-predict-income:ci
+  LIMITE_MB: 700                  # hoy pesa ~603 MB; ver "Presupuesto de tamaño"
+
+jobs:
+  # ------------------------------------------------------------------ 1. código
+  calidad:
+    name: Lint y pruebas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false   # el token no se queda en .git/config
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      # Los mismos comandos que corres en tu máquina: tasks.py es el único lugar donde
+      # se define "cómo se prueba este proyecto".
+      - name: Lint (ruff)
+        run: python tasks.py lint
+
+      - name: Pruebas (pytest — modelos sintéticos, sin datos ni MLflow)
+        run: python tasks.py test
+
+  # ------------------------------------------------------------------ 2. imagen
+  imagen:
+    name: Imagen (build, checks, escaneo, publicación)
+    needs: calidad
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write      # para pedirle a GitHub el token OIDC que AWS canjea
+    env:
+      # Sólo main publica. Coincide con la trust policy del rol (infra/aws/trust-policy.json):
+      # aunque este `if` se quitara por error, AWS rechazaría el token de cualquier otra rama.
+      PUBLICAR: ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Se construye UNA vez y esa misma imagen se revisa, se escanea y se publica.
+      # Reconstruir para publicar significaría publicar algo que nadie escaneó.
+      - name: Build (etapa runtime)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runtime
+          load: true
+          tags: ${{ env.IMAGEN_LOCAL }}
+          # Caché de capas en GitHub: si sólo cambió app/, no se reinstala scikit-learn.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # pyarrow ya se coló una vez (+150 MB, Hito 1). Un límite explícito convierte una
+      # regresión de tamaño en un PR rojo en vez de en una sorpresa en producción.
+      - name: Presupuesto de tamaño
+        run: |
+          mb=$(( $(docker image inspect "$IMAGEN_LOCAL" --format '{{.Size}}') / 1000 / 1000 ))
+          echo "### Imagen: ${mb} MB (límite ${LIMITE_MB} MB)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$mb" -gt "$LIMITE_MB" ]; then
+            echo "::error::la imagen pesa ${mb} MB, más que el límite de ${LIMITE_MB} MB"
+            exit 1
+          fi
+
+      - name: Corre como no-root (uid 10001)
+        run: test "$(docker run --rm --entrypoint id "$IMAGEN_LOCAL" -u)" = "10001"
+
+      # Las pruebas corrieron con requirements-dev.txt; la imagen sólo tiene
+      # requirements.txt. Esto atrapa una dependencia que falte SÓLO en la imagen.
+      - name: La imagen importa su propio código
+        run: docker run --rm --entrypoint python "$IMAGEN_LOCAL" -c "import app.main, mlflow.pyfunc; print('ok')"
+
+      # Dos pasadas: la primera informa todo lo HIGH/CRITICAL; la segunda sólo falla por
+      # CRITICAL que YA tenga parche. Bloquear por algo que nadie puede arreglar todavía
+      # (ignore-unfixed) sólo enseña al equipo a ignorar el semáforo.
+      - name: Escaneo de vulnerabilidades (reporte)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGEN_LOCAL }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Escaneo de vulnerabilidades (gate — CRITICAL con parche)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGEN_LOCAL }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-setup-trivy: true
+
+      # ---------------------------------------------------------- sólo en main
+      - name: Credenciales temporales de AWS (OIDC, 1 h)
+        if: env.PUBLICAR == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-${{ github.run_id }}
+
+      - name: Login a ECR
+        if: env.PUBLICAR == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Publicar (tag = commit)
+        if: env.PUBLICAR == 'true'
+        env:
+          REGISTRO: ${{ steps.ecr.outputs.registry }}
+          REPO: ${{ vars.ECR_REPOSITORY }}
+          TAG: ${{ github.sha }}
+        run: |
+          # Los tags del repositorio son INMUTABLES: re-correr este workflow para el mismo
+          # commit fallaría al empujar. Si la imagen de este commit ya existe, se respeta.
+          if aws ecr describe-images --repository-name "$REPO" --image-ids imageTag="$TAG" >/dev/null 2>&1; then
+            echo "### Ya existía \`$REPO:$TAG\` — no se vuelve a publicar" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          docker tag "$IMAGEN_LOCAL" "$REGISTRO/$REPO:$TAG"
+          docker push "$REGISTRO/$REPO:$TAG"
+          echo "### Publicada: \`$REGISTRO/$REPO:$TAG\`" >> "$GITHUB_STEP_SUMMARY"

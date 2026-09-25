@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "IniciarSesionEnECR",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "SubirYConsultarImagenesSoloDeEsteProyecto",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:DescribeImages"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:566540245226:repository/ml-predict-income/*"
+    }
+  ]
+}
