@@ -55,4 +55,3 @@ def validar(modelo: ModeloIngreso, X_test: pd.DataFrame) -> list[str]:
         ok.append(f"escolaridad 6→17 años: ${bajo:,.0f}→${alto:,.0f}")
 
     return ok
-import os
