@@ -31,10 +31,18 @@
 #    misma Debian + Python + wheels que `runtime`, elimina esa variable: lo que se
 #    entrena es exactamente lo que después se deserializa.
 
-ARG PYTHON_VERSION=3.11
+# ----------------------------------------------------------------- imagen base oficial
+# Fijada por DIGEST, no sólo por tag. `python:3.11-slim` es una etiqueta que Docker Hub
+# mueve cada vez que Debian publica parches: el mismo Dockerfile construido dos días
+# distintos daba dos imágenes distintas (la lección de Windows vs Linux, otra vez). Con el
+# digest, cada build usa exactamente la misma base y cambiarla es un commit: Dependabot
+# abre el PR cuando sale una nueva (.github/dependabot.yml), pasa por CI y el escaneo, y
+# así llegan los parches de Debian sin que nadie tenga que acordarse. El tag se deja sólo
+# para que un humano sepa qué es; Docker usa el digest.
+FROM python:3.11-slim@sha256:e41613d42d4891e4930f79523f93f81bbc7632584ec65e36ab055f41a800b41e AS python-oficial
 
 # ----------------------------------------------------------------- builder: servicio
-FROM python:${PYTHON_VERSION}-slim AS builder
+FROM python-oficial AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -55,7 +63,7 @@ COPY requirements-train.txt ./
 RUN pip install -r requirements-train.txt
 
 # ----------------------------------------------------------------- base común
-FROM python:${PYTHON_VERSION}-slim AS base
+FROM python-oficial AS base
 
 # HOME=/tmp: el usuario no tiene home, y con el sistema de archivos en sólo-lectura
 # cualquier librería que quiera escribir en ~ (cachés, configuración) tiene que caer en

@@ -1,5 +1,7 @@
 # Dependabot abre un PR cuando sale una versión nueva de una acción de GitHub, y
 # actualiza el SHA fijado junto con su comentario de versión. El PR pasa por el mismo CI.
+# También vigila el digest de la imagen base de Python: cuando Debian publica parches
+# (p. ej. los CVE de perl y zlib aceptados en el Hito 4), llega como PR.
 #
 # A propósito NO se incluye `pip`: subir scikit-learn de versión menor rompe la carga de
 # los modelos registrados (Hito 1). Esas actualizaciones se hacen a mano, junto con un
@@ -13,3 +15,16 @@ updates:
     groups:
       acciones:
         patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories: ["/", "/docker/mlflow"]
+    schedule:
+      interval: weekly
+    groups:
+      imagen-base:
+        patterns: ["*"]
+    # Sólo el DIGEST de python:3.11-slim, nunca la versión: pasar a 3.12+ cambia los
+    # wheels de todo el stack y debe ser una decisión con reentrenamiento, no un PR solo.
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
