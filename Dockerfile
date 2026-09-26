@@ -87,6 +87,11 @@ WORKDIR /app
 FROM base AS train
 COPY --from=builder-train /opt/venv /opt/venv
 COPY --chown=app:app src/ ./src/
+# El commit del que salió la imagen, grabado en ella (lo pasa `tasks.py preparar`). Va
+# al final a propósito: cambia en cada commit, y todo lo que está debajo de un ARG que
+# cambia se reconstruye. Aquí no hay nada debajo.
+ARG GIT_SHA=desconocido
+ENV GIT_SHA=${GIT_SHA}
 USER app
 CMD ["python", "-m", "src.train"]
 

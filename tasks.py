@@ -15,8 +15,10 @@ el mismo que corre CI. Cero dependencias: sólo la librería estándar.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
+import secrets
 import subprocess
 import sys
 import time
@@ -121,6 +123,76 @@ def mlflow():
     print("MLflow listo → http://127.0.0.1:5000")
 
 
+# ------------------------------------------------------------- Airflow (Hito 5)
+ENV_FILE = RAIZ / ".env"
+
+
+def _asegurar_env() -> dict[str, str]:
+    """Crea o completa `.env` con los secretos de Airflow. Nunca cambia uno que ya exista.
+
+    Por qué aquí y no en docker-compose.yml: un secreto escrito en un archivo versionado
+    deja de ser secreto el día del primer push. `.env` está en .gitignore y docker compose
+    lo lee solo. Generarlos con `secrets` evita el clásico `airflow/airflow` que termina en
+    producción porque "era sólo para probar".
+    """
+    actuales: dict[str, str] = {}
+    if ENV_FILE.exists():
+        for linea in ENV_FILE.read_text(encoding="utf-8").splitlines():
+            if "=" in linea and not linea.lstrip().startswith("#"):
+                k, v = linea.split("=", 1)
+                actuales[k.strip()] = v.strip()
+    generadores = {
+        "AIRFLOW_JWT_SECRET": lambda: secrets.token_urlsafe(32),
+        # Fernet exige exactamente 32 bytes en base64 url-safe.
+        "AIRFLOW_FERNET_KEY": lambda: base64.urlsafe_b64encode(os.urandom(32)).decode(),
+        "AIRFLOW_ADMIN_PASSWORD": lambda: secrets.token_urlsafe(12),
+    }
+    nuevos = {k: gen() for k, gen in generadores.items() if not actuales.get(k)}
+    if nuevos:
+        previo = ENV_FILE.read_text(encoding="utf-8") if ENV_FILE.exists() else ""
+        with ENV_FILE.open("a", encoding="utf-8") as f:
+            if previo and not previo.endswith("\n"):
+                f.write("\n")
+            f.write("# Secretos de Airflow, generados por tasks.py. No se versiona (.gitignore).\n")
+            for k, v in nuevos.items():
+                f.write(f"{k}={v}\n")
+        print(f"  .env: generé {', '.join(nuevos)}")
+    return {**actuales, **nuevos}
+
+
+@tarea("levanta Airflow en http://127.0.0.1:8080 (usuario admin, contraseña en .env)")
+def airflow():
+    env = _asegurar_env()
+    # Sin --wait: airflow-init es de un solo uso y termina; --wait lo toma como falla.
+    corre(*COMPOSE, "--profile", "airflow", "up", "-d")
+    url = "http://127.0.0.1:8080/api/v2/monitor/health"
+    print("esperando al api-server (la primera vez baja ~1 GB de imagen)…")
+    for _ in range(90):
+        try:
+            _, salud = _get(url, timeout=3)
+            if salud.get("scheduler", {}).get("status") == "healthy":
+                print("Airflow listo → http://127.0.0.1:8080")
+                print(f"  usuario: admin   contraseña: {env['AIRFLOW_ADMIN_PASSWORD']}  (en .env)")
+                return
+        except (urllib.error.URLError, ConnectionError, TimeoutError, ValueError):
+            pass
+        time.sleep(4)
+    print("Airflow no quedó sano. Últimos logs:")
+    corre(*COMPOSE, "--profile", "airflow", "logs", "--tail", "30", "airflow-init",
+          "airflow-apiserver", "airflow-scheduler", check=False)
+    sys.exit(1)
+
+
+@tarea("prepara lo que usan los DAGs: imagen de entrenamiento + datos en su volumen")
+def preparar():
+    env = {"GIT_SHA": _git_sha()}
+    if env["GIT_SHA"].endswith("-dirty"):
+        print(f"⚠  hay cambios sin commitear: la imagen quedará marcada como {env['GIT_SHA']}")
+    corre(*COMPOSE, "--profile", "train", "build", "train", env=env)
+    corre(*COMPOSE, "--profile", "datos", "run", "--rm", "sembrar-datos", env=env)
+    print("listo: imagen ml-predict-income-train:dev y volumen ml-predict-income-datos")
+
+
 @tarea("entrena EN CONTENEDOR Linux y registra (la forma canónica)")
 def train():
     sha = _git_sha()
@@ -172,14 +244,17 @@ def up():
     sys.exit(1)
 
 
-@tarea("apaga los contenedores (el volumen de MLflow se conserva)")
+@tarea("apaga todos los contenedores; los volúmenes (MLflow, Airflow) se conservan")
 def down():
-    corre(*COMPOSE, "down")
+    # Con perfiles, `down` sólo apaga los servicios de los perfiles activos: sin estas
+    # banderas, Airflow quedaría corriendo. NUNCA `down -v`: borra también mlflow-data,
+    # es decir, el registry con todos los modelos.
+    corre(*COMPOSE, "--profile", "train", "--profile", "airflow", "down")
 
 
-@tarea("muestra los logs de la API")
-def logs():
-    corre(*COMPOSE, "logs", "--tail", "60", "api")
+@tarea("muestra los logs de un servicio: logs [servicio]  (por omisión, api)")
+def logs(servicio: str = "api"):
+    corre(*COMPOSE, "--profile", "airflow", "logs", "--tail", "60", servicio)
 
 
 @tarea("construye sólo la imagen de servicio, con tag (para inspect/scan)")

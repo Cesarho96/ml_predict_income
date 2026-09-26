@@ -52,6 +52,8 @@ log = logging.getLogger("train")
 RAIZ = Path(__file__).resolve().parent.parent
 PROC = RAIZ / "data" / "processed"
 TARGET = "ingreso_mensual"
+# Lo pone el DAG `reentrenar` ({{ run_id }} de Airflow). Vacío cuando se entrena a mano.
+ORQUESTADOR_RUN_ID = os.getenv("ORQUESTADOR_RUN_ID", "").strip()
 COBERTURA_OBJETIVO = 0.80
 
 # Hiperparámetros del notebook 04 §6 (RandomizedSearch sobre validation → grid local).
@@ -120,9 +122,9 @@ def sha_git() -> str:
 
 
 # ---------------------------------------------------------------- datos
-def cargar_datos() -> pd.DataFrame:
-    df = pd.read_parquet(PROC / "enigh2024_features_v2.parquet")
-    split = pd.read_csv(PROC / "split_upm_3way.csv", dtype={"upm": str})
+def cargar_datos(proc: Path = PROC) -> pd.DataFrame:
+    df = pd.read_parquet(proc / "enigh2024_features_v2.parquet")
+    split = pd.read_csv(proc / "split_upm_3way.csv", dtype={"upm": str})
     df["upm"] = df["upm"].astype(str)
     df = df.merge(split, on="upm", how="left", validate="many_to_one")
     if df["particion"].isna().any():
@@ -237,7 +239,13 @@ def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None
                              "target": "log(ingreso_mensual)",
                              # Mismo commit ≠ mismo modelo si cambia la plataforma.
                              "plataforma": platform.system(),
-                             "python": platform.python_version()})
+                             "python": platform.python_version(),
+                             # Linaje: qué corrida del orquestador produjo este modelo. Es
+                             # como `comparar` encuentra lo que acaba de entrenar el DAG,
+                             # sin adivinar "la versión más nueva" (que podría ser de otro).
+                             "origen": "airflow" if ORQUESTADOR_RUN_ID else "manual",
+                             **({"orquestador_run_id": ORQUESTADOR_RUN_ID}
+                                if ORQUESTADOR_RUN_ID else {})})
             mlflow.log_params({**cfg["params"], "n_features": len(d["features"]),
                                "cobertura_objetivo": COBERTURA_OBJETIVO,
                                "entrenado_ponderado": False})

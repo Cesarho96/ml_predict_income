@@ -49,6 +49,21 @@ lectura, no se copia a la imagen.
 
 `python tasks.py` sin argumentos lista todas las tareas.
 
+## Orquestación con Airflow (Hito 5)
+
+```bash
+python tasks.py airflow     # http://127.0.0.1:8080 — usuario admin, contraseña en .env
+python tasks.py logs airflow-scheduler
+python tasks.py down        # apaga todo; los volúmenes se conservan
+```
+
+La primera vez, `tasks.py airflow` genera `.env` con los secretos de Airflow (JWT, Fernet,
+contraseña del admin). `.env` no se versiona. **Nunca uses `docker compose down -v`**: borra
+también el volumen de MLflow, es decir, el registry con todos los modelos.
+
+Los DAGs viven en `airflow/dags/` y se montan en sólo lectura: se editan en el repo y
+Airflow los recoge solo en unos segundos.
+
 ## Estructura
 
 ```
