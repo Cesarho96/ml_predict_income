@@ -27,6 +27,9 @@ tests/
 scripts/
 docker/
 docker-compose.yml
+airflow/
+infra/
+.github/
 
 .env
 *.log

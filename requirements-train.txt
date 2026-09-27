@@ -6,3 +6,6 @@
 
 # Leer el parquet. En servicio no hace falta (y son ~150 MB): ver Hito 2.
 pyarrow==25.0.1
+
+# Validar los datos antes de entrenar (src/validar_datos.py, Hito 5).
+pandera==0.33.1
