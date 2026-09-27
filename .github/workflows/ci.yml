@@ -1,6 +1,7 @@
 # CI/CD — Hito 4
 #
 #   PR hacia main   →  lint + pruebas  →  build + checks de la imagen + escaneo   (no publica)
+#                      DAGs de Airflow (en paralelo, con Airflow real)
 #   push a main     →  lo mismo        →  … y publica en ECR con tag = commit
 #
 # Orden a propósito: lo barato primero. Ruff tarda segundos y pytest ~1 minuto; construir
@@ -63,7 +64,42 @@ jobs:
       - name: Pruebas (pytest — modelos sintéticos, sin datos ni MLflow)
         run: python tasks.py test
 
-  # ------------------------------------------------------------------ 2. imagen
+  # ------------------------------------------------------------------ 2. DAGs
+  # En paralelo con el resto: no depende del código del modelo ni de la imagen.
+  dags:
+    name: DAGs de Airflow
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # La MISMA versión que corre en docker-compose.yml (apache/airflow:3.3.2). Si se
+      # sube una, se sube la otra: probar con una versión y correr con otra no prueba nada.
+      AIRFLOW_VERSION: "3.3.2"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: .github/workflows/ci.yml
+
+      # Airflow SOLO, con sus constraints oficiales y SIN requirements-dev.txt: el mismo
+      # aislamiento que en producción, donde Airflow y el modelo viven en imágenes
+      # distintas. Si el DAG importara algo del modelo, aquí fallaría.
+      - name: Instalar Airflow
+        run: |
+          pip install "apache-airflow[docker]==${AIRFLOW_VERSION}" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+          pip install pytest==9.1.1
+
+      - name: Cargar y revisar los DAGs
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow
+        run: python -m pytest -q airflow/tests
+
+  # ------------------------------------------------------------------ 3. imagen
   imagen:
     name: Imagen (build, checks, escaneo, publicación)
     needs: calidad
