@@ -108,12 +108,12 @@ def test():
 
 @tarea("revisa estilo y errores")
 def lint():
-    corre(PY, "-m", "ruff", "check", "src", "app", "tests", "scripts")
+    corre(PY, "-m", "ruff", "check", "src", "app", "tests", "scripts", "airflow")
 
 
 @tarea("corrige lo que ruff pueda corregir solo")
 def fmt():
-    corre(PY, "-m", "ruff", "check", "--fix", "src", "app", "tests", "scripts")
+    corre(PY, "-m", "ruff", "check", "--fix", "src", "app", "tests", "scripts", "airflow")
 
 
 # ------------------------------------------------------------- MLflow y modelos
@@ -162,7 +162,7 @@ def _asegurar_env() -> dict[str, str]:
 
 @tarea("levanta Airflow en http://127.0.0.1:8080 (usuario admin, contraseña en .env)")
 def airflow():
-    env = _asegurar_env()
+    _asegurar_env()
     # Sin --wait: airflow-init es de un solo uso y termina; --wait lo toma como falla.
     corre(*COMPOSE, "--profile", "airflow", "up", "-d")
     url = "http://127.0.0.1:8080/api/v2/monitor/health"
@@ -172,7 +172,9 @@ def airflow():
             _, salud = _get(url, timeout=3)
             if salud.get("scheduler", {}).get("status") == "healthy":
                 print("Airflow listo → http://127.0.0.1:8080")
-                print(f"  usuario: admin   contraseña: {env['AIRFLOW_ADMIN_PASSWORD']}  (en .env)")
+                # La contraseña NO se imprime: una terminal termina en capturas, logs de
+                # CI y chats. Está en .env, que no sale de tu máquina.
+                print("  usuario: admin   contraseña: la línea AIRFLOW_ADMIN_PASSWORD de .env")
                 return
         except (urllib.error.URLError, ConnectionError, TimeoutError, ValueError):
             pass
@@ -208,6 +210,11 @@ def train_local():
     print("⚠  entrenar en Windows da un modelo distinto al de Linux con el mismo commit.\n"
           "   Úsalo para iterar; para registrar lo que se va a servir: python tasks.py train")
     corre(PY, "-m", "src.train", env={"MLFLOW_TRACKING_URI": TRACKING, "GIT_SHA": _git_sha()})
+
+
+@tarea("muestra el registry: versiones, aliases, origen y veredicto")
+def modelos():
+    corre(PY, "scripts/modelos.py", env={"MLFLOW_TRACKING_URI": TRACKING})
 
 
 @tarea("mueve un alias: promover <segmento> <versión> [alias]")
