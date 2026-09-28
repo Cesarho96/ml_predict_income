@@ -30,15 +30,21 @@ def test_todos_los_dags_cargan_sin_errores(dagbag):
 
 def test_reentrenar_tiene_el_orden_correcto(dagbag):
     dag = dagbag.dags["reentrenar"]  # el dict, no get_dag(): ése consulta la base
+    assert dag.get_task("construir_dataset").downstream_task_ids == {"validar_datos"}
     assert dag.get_task("validar_datos").downstream_task_ids == {"entrenar"}
     assert dag.get_task("entrenar").downstream_task_ids == {"comparar_con_champion"}
     assert dag.max_active_runs == 1 and dag.schedule is None
 
 
-def test_las_tareas_leen_datos_en_solo_lectura_y_llevan_el_linaje(dagbag):
+def test_solo_construir_escribe_y_todas_llevan_edicion_y_linaje(dagbag):
     dag = dagbag.dags["reentrenar"]  # el dict, no get_dag(): ése consulta la base
+    assert dag.params["edicion"] == 2024
     for t in dag.tasks:
-        assert all(m["ReadOnly"] for m in t.mounts), f"{t.task_id} puede escribir en los datos"
+        escribe = [m["Target"] for m in t.mounts if not m["ReadOnly"]]
+        # Sólo construir_dataset escribe, y sólo en los procesados; el crudo, nunca.
+        esperado = ["/app/data/processed"] if t.task_id == "construir_dataset" else []
+        assert escribe == esperado, f"{t.task_id} escribe en {escribe}"
+        assert t.environment["EDICION"] == "{{ params.edicion }}"
         assert t.mount_tmp_dir is False
     for tid in ("entrenar", "comparar_con_champion"):
         assert dag.get_task(tid).environment["ORQUESTADOR_RUN_ID"] == "{{ run_id }}"

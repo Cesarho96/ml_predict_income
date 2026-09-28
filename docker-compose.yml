@@ -44,6 +44,7 @@ x-airflow: &airflow
     ML_IMAGEN_ENTRENAMIENTO: ml-predict-income-train:dev
     ML_RED_DOCKER: ml-predict-income_default
     ML_VOLUMEN_DATOS: ml-predict-income-datos
+    ML_VOLUMEN_CRUDOS: ml-predict-income-crudos
     ML_MLFLOW_URI: http://mlflow:5000
   volumes:
     # Los DAGs se montan en SÓLO LECTURA: Airflow los lee, nunca los escribe.
@@ -99,21 +100,28 @@ services:
     mem_limit: 1g
     cpus: 1.0
 
-  # Copia data/processed al volumen que leen las tareas del DAG. Se corre con
-  # `python tasks.py preparar`. Por qué un volumen y no montar la carpeta: las tareas las
-  # crea Airflow a través del API de Docker, y ahí una ruta de Windows (D:\...) no
-  # significa nada. Un volumen con nombre funciona igual en cualquier sistema.
+  # Llena los volúmenes que usan las tareas del DAG. Se corre con `python tasks.py preparar`.
+  # Por qué volúmenes y no montar carpetas: las tareas las crea Airflow a través del API
+  # de Docker, y ahí una ruta de Windows (D:\...) no significa nada.
+  #   · crudos ← data/raw: los CSV de INEGI (cp -u: sólo lo nuevo; la 1ª vez ~840 MB).
+  #   · datos  ← SÓLO las decisiones versionadas (features congeladas y partición). Desde
+  #     el Hito 5b el parquet ya no se copia: lo construye el DAG desde el crudo.
   sembrar-datos:
     image: ml-predict-income-train:dev
     profiles: ["datos"]
-    user: "0:0"                      # escribe en el volumen y se lo cede al usuario app
+    user: "0:0"                      # escribe en los volúmenes y se los cede al usuario app
     entrypoint: ["sh", "-c"]
     command:
-      - cp -r /origen/. /app/data/processed/
-        && chown -R 10001:10001 /app/data/processed
-        && ls -la /app/data/processed
+      - mkdir -p /app/data/raw
+        && cp -ru /origen-crudos/. /app/data/raw/
+        && cp /origen/features_ocupados.json /origen/features_no_ocupados.json
+              /origen/split_upm_3way.csv /app/data/processed/
+        && chown -R 10001:10001 /app/data
+        && du -sh /app/data/raw && ls -la /app/data/processed
     volumes:
+      - ./data/raw:/origen-crudos:ro
       - ./data/processed:/origen:ro
+      - crudos:/app/data/raw
       - datos:/app/data/processed
 
   # ---------------------------------------------------------------- Airflow
@@ -216,5 +224,7 @@ volumes:
   mlflow-data:                     # la base y los artefactos sobreviven a `down`
   datos:
     name: ml-predict-income-datos  # nombre fijo: los DAGs lo montan por este nombre
+  crudos:
+    name: ml-predict-income-crudos # microdatos de INEGI, sólo lectura para las tareas
   airflow-db:                      # metadatos de Airflow: corridas, historial, usuarios
   airflow-logs:                    # logs de cada tarea (se ven en la UI)

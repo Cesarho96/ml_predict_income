@@ -103,7 +103,12 @@ def instalar():
 
 @tarea("corre las pruebas (no necesitan Docker, ni MLflow, ni datos)")
 def test():
-    corre(PY, "-m", "pytest", "-q")
+    corre(PY, "-m", "pytest", "-q", "-m", "not paridad")
+
+
+@tarea("pipeline vs notebooks sobre la ENIGH 2024 cruda (necesita data/raw)")
+def paridad():
+    corre(PY, "-m", "pytest", "-q", "-m", "paridad", "-rs")
 
 
 @tarea("revisa estilo y errores")
@@ -185,14 +190,15 @@ def airflow():
     sys.exit(1)
 
 
-@tarea("prepara lo que usan los DAGs: imagen de entrenamiento + datos en su volumen")
+@tarea("prepara lo que usan los DAGs: imagen de entrenamiento + crudos y decisiones")
 def preparar():
     env = {"GIT_SHA": _git_sha()}
     if env["GIT_SHA"].endswith("-dirty"):
         print(f"⚠  hay cambios sin commitear: la imagen quedará marcada como {env['GIT_SHA']}")
     corre(*COMPOSE, "--profile", "train", "build", "train", env=env)
     corre(*COMPOSE, "--profile", "datos", "run", "--rm", "sembrar-datos", env=env)
-    print("listo: imagen ml-predict-income-train:dev y volumen ml-predict-income-datos")
+    print("listo: imagen ml-predict-income-train:dev, volúmenes ml-predict-income-crudos "
+          "y ml-predict-income-datos")
 
 
 @tarea("entrena EN CONTENEDOR Linux y registra (la forma canónica)")
