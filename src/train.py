@@ -42,6 +42,7 @@ from mlflow.models import infer_signature
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.pipeline import Pipeline
 
+from src import datos
 from src.model import ALFAS, ModeloIngreso, derivar_contrato, ejemplo_de_entrada
 from src.preprocessing import ACategorias
 from src.validacion import validar
@@ -50,7 +51,7 @@ logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(message)s"
 log = logging.getLogger("train")
 
 RAIZ = Path(__file__).resolve().parent.parent
-PROC = RAIZ / "data" / "processed"
+PROC = datos.PROC
 TARGET = "ingreso_mensual"
 # Lo pone el DAG `reentrenar` ({{ run_id }} de Airflow). Vacío cuando se entrena a mano.
 ORQUESTADOR_RUN_ID = os.getenv("ORQUESTADOR_RUN_ID", "").strip()
@@ -123,7 +124,7 @@ def sha_git() -> str:
 
 # ---------------------------------------------------------------- datos
 def cargar_datos(proc: Path = PROC) -> pd.DataFrame:
-    df = pd.read_parquet(proc / "enigh2024_features_v2.parquet")
+    df = pd.read_parquet(proc / datos.dataset(datos.EDICION))
     split = pd.read_csv(proc / "split_upm_3way.csv", dtype={"upm": str})
     df["upm"] = df["upm"].astype(str)
     df = df.merge(split, on="upm", how="left", validate="many_to_one")
@@ -133,7 +134,7 @@ def cargar_datos(proc: Path = PROC) -> pd.DataFrame:
 
 
 def preparar_segmento(df: pd.DataFrame, cfg: dict) -> dict:
-    spec = json.loads((PROC / cfg["contrato"]).read_text(encoding="utf-8"))
+    spec = json.loads((datos.PROC / cfg["contrato"]).read_text(encoding="utf-8"))
     feats = spec["features"]
     sub = df[df.segmento == cfg["etiqueta"]].reset_index(drop=True)
 
@@ -246,7 +247,11 @@ def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None
                              "origen": "airflow" if ORQUESTADOR_RUN_ID else "manual",
                              **({"orquestador_run_id": ORQUESTADOR_RUN_ID}
                                 if ORQUESTADOR_RUN_ID else {})})
+            # La edición de la ENIGH es parte de la identidad del modelo: dos corridas
+            # del mismo commit con ediciones distintas son modelos distintos.
             mlflow.log_params({**cfg["params"], "n_features": len(d["features"]),
+                               "edicion_enigh": datos.EDICION,
+                               "dataset": datos.dataset(datos.EDICION),
                                "cobertura_objetivo": COBERTURA_OBJETIVO,
                                "entrenado_ponderado": False})
             mlflow.log_metrics({"n_train": int(d["tr"].sum()),

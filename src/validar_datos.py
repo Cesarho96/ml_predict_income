@@ -31,9 +31,10 @@ import pandas as pd
 import pandera.pandas as pa
 from pandera.pandas import Check, Column, DataFrameSchema
 
-RAIZ = Path(__file__).resolve().parent.parent
-PROC = RAIZ / "data" / "processed"
-DATASET = "enigh2024_features_v2.parquet"
+from src import datos
+
+PROC = datos.PROC
+DATASET = datos.dataset(datos.EDICION)
 
 SEGMENTOS = ("Ocupados", "No ocupados")
 ENTIDADES = [f"{i:02d}" for i in range(1, 33)]

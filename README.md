@@ -64,6 +64,15 @@ también el volumen de MLflow, es decir, el registry con todos los modelos.
 Los DAGs viven en `airflow/dags/` y se montan en sólo lectura: se editan en el repo y
 Airflow los recoge solo en unos segundos.
 
+## Del microdato crudo al modelo (Hito 5b)
+
+El DAG `reentrenar` empieza en los CSV de INEGI (`data/raw/`), no en un parquet de
+notebook: `src/pipeline/` construye el dataset, y `python tasks.py paridad` prueba que es
+idéntico al que produjeron los notebooks 01–02 sobre la ENIGH 2024.
+
+Cuando salga una edición nueva: copiar sus CSV a `data/raw/`, `python tasks.py preparar`,
+y en Airflow **Trigger DAG w/ config** → `edicion: 2026`.
+
 ## Estructura
 
 ```
