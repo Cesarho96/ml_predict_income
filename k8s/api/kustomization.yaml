@@ -1,0 +1,26 @@
+# La lista de lo que forma la aplicación en Kubernetes, más ajustes comunes a todo.
+#
+#     kubectl kustomize k8s/api     # ver el YAML final, SIN aplicarlo
+#     kubectl diff -k k8s/api       # qué cambiaría en el cluster
+#     kubectl apply -k k8s/api      # aplicarlo
+#
+# Kustomize viene dentro de kubectl (-k).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Todo lo de abajo vive en este namespace (una "carpeta" dentro del cluster). Borrar el
+# namespace borra la app entera sin tocar nada más del cluster.
+namespace: ml-predict-income
+
+resources:
+  - namespace.yaml
+  - mlflow.yaml
+  - config.yaml
+  - deployment.yaml
+  - service.yaml
+
+# QUÉ versión de la API corre en el cluster: una línea. Cambiarla y hacer `apply` es un
+# despliegue; el tag es el commit (inmutable, igual que en ECR).
+images:
+  - name: ml-predict-income
+    newTag: 0bd56aa

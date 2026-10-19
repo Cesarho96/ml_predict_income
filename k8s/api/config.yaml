@@ -1,0 +1,16 @@
+# La configuración de la API, fuera de la imagen. Equivale al bloque `environment:` del
+# servicio `api` en docker-compose.yml. La misma imagen sirve en cualquier entorno; lo
+# que cambia entre entornos es esto.
+#
+# Nada secreto aquí: un ConfigMap se guarda en texto plano. Las contraseñas irían en un
+# Secret (y en producción, en un gestor como AWS Secrets Manager).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+data:
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+  MODEL_ALIAS: champion
+  # Fallar rápido al arrancar si el registry no responde: Kubernetes reinicia el pod.
+  MLFLOW_HTTP_REQUEST_MAX_RETRIES: "2"
+  MLFLOW_HTTP_REQUEST_TIMEOUT: "15"
