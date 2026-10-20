@@ -1,0 +1,62 @@
+# Tráfico constante contra la API, DESDE DENTRO del cluster, para comprobar que un
+# despliegue o un `rollout undo` no tira ni una petición.
+#
+#     kubectl apply -f k8s/pruebas/trafico.yaml
+#     kubectl logs -f -n ml-predict-income trafico
+#     kubectl delete -f k8s/pruebas/trafico.yaml
+#
+# Por qué desde dentro y no con `kubectl port-forward`: port-forward es un túnel a UN
+# pod; cuando ese pod se apaga en el rollout, el túnel se cae. Aquí las peticiones van
+# al Service `api`, que reparte entre los pods listos: lo mismo que verían los usuarios.
+#
+# Cada petición abre una conexión nueva (urllib no reutiliza conexiones), así que cada
+# una pasa otra vez por el reparto del Service: si un pod sale de la lista, se nota.
+#
+# No es parte de la app (no está en k8s/api/kustomization.yaml). Usa la imagen de la API
+# sólo porque trae Python y ya está en el nodo. Cumple el perfil "restricted" del
+# namespace: si no, Kubernetes lo rechazaría.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: trafico
+  namespace: ml-predict-income
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: trafico
+      image: ml-predict-income:0bd56aa
+      command: ["python", "-u", "-c"]
+      args:
+        - |
+          import collections, json, time, urllib.request
+          URL = "http://api/health"          # el Service, por su nombre
+          total_ok = total_err = 0
+          ventana = collections.Counter()
+          inicio = t0 = time.time()
+          while True:
+              try:
+                  with urllib.request.urlopen(URL, timeout=2) as r:
+                      ventana[json.loads(r.read()).get("commit", "sin-commit")[:7]] += 1
+                      total_ok += 1
+              except Exception as e:
+                  total_err += 1
+                  print(f"  ERROR {type(e).__name__}: {e}")
+              if time.time() - t0 >= 2:
+                  print(f"t={time.time() - inicio:5.0f}s  respondió: {dict(ventana)}"
+                        f"  |  acumulado: {total_ok} ok, {total_err} errores")
+                  ventana.clear()
+                  t0 = time.time()
+              time.sleep(0.05)               # ~15–20 peticiones por segundo
+      resources:
+        requests: {cpu: 50m, memory: 64Mi}
+        limits: {cpu: 200m, memory: 128Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: [ALL]}

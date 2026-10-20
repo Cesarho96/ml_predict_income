@@ -106,6 +106,12 @@ COPY --from=builder /opt/venv /opt/venv
 COPY --chown=app:app src/ ./src/
 COPY --chown=app:app app/ ./app/
 
+# El commit del que salió la imagen; /health lo reporta. Con varias réplicas y un
+# despliegue a medio camino, es la forma de saber QUÉ código respondió cada petición
+# (/ready dice qué MODELO). Va después de los COPY: debajo sólo hay metadatos.
+ARG GIT_SHA=desconocido
+ENV GIT_SHA=${GIT_SHA}
+
 USER app
 EXPOSE 8000
 

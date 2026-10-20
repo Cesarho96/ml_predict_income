@@ -23,4 +23,4 @@ resources:
 # despliegue; el tag es el commit (inmutable, igual que en ECR).
 images:
   - name: ml-predict-income
-    newTag: 0bd56aa
+    newTag: "0bd56aa"   # entre comillas: un sha como 1234567 o 12e4567 se leería como número

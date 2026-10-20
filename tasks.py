@@ -272,7 +272,7 @@ def logs(servicio: str = "api"):
 
 @tarea("construye sólo la imagen de servicio, con tag (para inspect/scan)")
 def build():
-    corre("docker", "build", "-t", f"{IMAGEN}:{TAG}", ".")
+    corre("docker", "build", "--build-arg", f"GIT_SHA={_git_sha()}", "-t", f"{IMAGEN}:{TAG}", ".")
 
 
 @tarea("prueba de humo contra una API ya corriendo (local o contenedor)")

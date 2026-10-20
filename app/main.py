@@ -23,6 +23,7 @@ logging.basicConfig(
 log = logging.getLogger("api")
 
 APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
+COMMIT = os.getenv("GIT_SHA", "desconocido")      # lo graba el Dockerfile
 predictor = Predictor()
 
 
@@ -125,7 +126,7 @@ def health():
     Kubernetes reinicia el contenedor si esto falla, así que debe ser barato y no
     depender de nada externo.
     """
-    return {"status": "ok", "version": APP_VERSION}
+    return {"status": "ok", "version": APP_VERSION, "commit": COMMIT}
 
 
 @app.get("/ready", tags=["operación"])

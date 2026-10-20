@@ -127,6 +127,8 @@ jobs:
           context: .
           target: runtime
           load: true
+          # El commit queda grabado en la imagen; /health lo reporta.
+          build-args: GIT_SHA=${{ github.sha }}
           tags: ${{ env.IMAGEN_LOCAL }}
           # Caché de capas en GitHub: si sólo cambió app/, no se reinstala scikit-learn.
           cache-from: type=gha
