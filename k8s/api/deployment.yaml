@@ -7,7 +7,6 @@ metadata:
   labels:
     app: api
 spec:
-  replicas: 2                   # dos copias: si una muere, la otra sigue atendiendo
   revisionHistoryLimit: 5       # versiones anteriores guardadas para `rollout undo`
   selector:
     matchLabels:

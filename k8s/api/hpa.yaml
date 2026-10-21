@@ -1,0 +1,33 @@
+# HorizontalPodAutoscaler: ajusta `replicas` del Deployment según el uso de CPU.
+#
+# Cada 15 s compara el uso PROMEDIO de CPU de los pods contra la meta y calcula:
+#     réplicas deseadas = ceil(réplicas actuales × uso actual / meta)
+# El uso se mide como % del `requests.cpu` del pod (250m): meta 70% = 175m por pod.
+# Por eso sin `requests` el HPA no tiene contra qué medir y no hace nada.
+#
+# Desde que existe el HPA, él es el DUEÑO del número de réplicas: deployment.yaml ya no
+# debe decir `replicas`, o cada `kubectl apply` pelearía con el HPA.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 2      # nunca menos de 2: una sola réplica no sobrevive a un reinicio
+  maxReplicas: 4      # techo: protege al nodo (y a la factura) de un pico o un bug
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      # Subir es inmediato; bajar espera a que la carga lleve 2 min baja, para no
+      # quitar y volver a poner pods con cada bache. (El valor por omisión es 5 min;
+      # aquí se acorta para verlo durante el ejercicio.)
+      stabilizationWindowSeconds: 120

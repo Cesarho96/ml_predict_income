@@ -1,0 +1,75 @@
+# Carga sostenida sobre /predict durante 5 minutos, para ver al HPA escalar.
+#
+#     kubectl apply -f k8s/pruebas/carga.yaml
+#     kubectl logs -f -n ml-predict-income carga
+#     kubectl delete -f k8s/pruebas/carga.yaml
+#
+# 8 hilos piden predicciones sin pausa a través del Service `api`. Cada 5 s imprime
+# peticiones por segundo, latencia p50/p95 y errores: cuando el HPA agrega pods, las
+# pet/s deberían subir y la latencia bajar.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: carga
+  namespace: ml-predict-income
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: carga
+      image: ml-predict-income:0bd56aa     # sólo por el Python; ya está en el nodo
+      command: ["python", "-u", "-c"]
+      args:
+        - |
+          import json, threading, time, urllib.request
+          URL, HILOS, DURACION = "http://api/predict", 8, 300
+          CUERPO = json.dumps({
+              "trabajo_mes_pasado": True, "horas_trabajadas": 48,
+              "formalidad": "3 Formal (con seguridad social)", "cve_entidad": "09",
+              "anios_escolaridad": 16, "sinco_grupo": "2 Profesionistas y técnicos",
+              "posicion_ocupacion": "Subordinado remunerado", "es_jefe_hogar": 1,
+              "sector_agrupado": "6 Servicios profesionales y financieros",
+              "es_mujer": 0, "tam_empresa_grupo": "3 Mediana (51-250)"}).encode()
+          latencias, errores = [], [0]
+          candado = threading.Lock()
+          fin = time.time() + DURACION
+
+          def trabajador():
+              while time.time() < fin:
+                  t = time.perf_counter()
+                  try:
+                      req = urllib.request.Request(
+                          URL, data=CUERPO, headers={"Content-Type": "application/json"})
+                      with urllib.request.urlopen(req, timeout=10) as r:
+                          r.read()
+                      with candado:
+                          latencias.append(time.perf_counter() - t)
+                  except Exception:
+                      with candado:
+                          errores[0] += 1
+
+          for _ in range(HILOS):
+              threading.Thread(target=trabajador, daemon=True).start()
+          inicio = time.time()
+          while time.time() < fin:
+              time.sleep(5)
+              with candado:
+                  m, e = sorted(latencias), errores[0]
+                  latencias.clear()
+                  errores[0] = 0
+              p = (lambda q: m[int(len(m) * q)] * 1000) if m else (lambda q: 0)
+              print(f"t={time.time() - inicio:4.0f}s  {len(m) / 5:5.1f} pet/s"
+                    f"  p50={p(0.50):5.0f} ms  p95={p(0.95):5.0f} ms  errores={e}")
+          print("fin de la carga")
+      resources:
+        requests: {cpu: 500m, memory: 128Mi}
+        limits: {cpu: "1", memory: 256Mi}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: [ALL]}
