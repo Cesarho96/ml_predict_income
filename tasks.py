@@ -299,6 +299,11 @@ def smoke():
             print(f"  {ruta:<9} {code}  {json.dumps(cuerpo, ensure_ascii=False)[:110]}")
         code, cuerpo = pide("/predict", caso)
         print(f"  /predict  {code}  {cuerpo['mensaje']}  [{cuerpo['version_modelo']}]")
+    # HTTPError va primero: es subclase de URLError. Un 404 significa que ALGUIEN respondió
+    # (un Gateway, un proxy, otra app), no que el puerto esté vacío.
+    except urllib.error.HTTPError as e:
+        sys.exit(f"{base} respondió HTTP {e.code} ({e.reason}): hay algo escuchando, pero no "
+                 "es la API o no enruta hacia ella (¿Gateway sin ruta? ¿otro puerto?)")
     except urllib.error.URLError as e:
         sys.exit(f"no hay nadie escuchando en {base} — ¿corriste `python tasks.py up` "
                  f"o `python tasks.py api`?  ({e})")
