@@ -1,0 +1,13 @@
+# La puerta de entrada del cluster (Gateway API). Es del CLUSTER, no de una app: en una
+# empresa la administra el equipo de plataforma, y cada app sólo declara sus rutas
+# (k8s/api/ruta.yaml).
+#
+#     kubectl apply -k k8s/cluster/gateway
+#
+# Requiere cloud-provider-kind corriendo (k8s/cloud-provider-kind.compose.yaml): él
+# instala las CRDs de Gateway API y es el controlador de la GatewayClass.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - gateway.yaml

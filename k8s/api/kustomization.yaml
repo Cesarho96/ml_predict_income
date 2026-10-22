@@ -19,6 +19,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - hpa.yaml
+  - ruta.yaml
 
 # QUÉ versión de la API corre en el cluster: una línea. Cambiarla y hacer `apply` es un
 # despliegue; el tag es el commit (inmutable, igual que en ECR).

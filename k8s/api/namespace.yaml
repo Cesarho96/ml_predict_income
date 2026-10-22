@@ -8,3 +8,5 @@ metadata:
   labels:
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/enforce-version: latest
+    # Permiso para colgar rutas en el Gateway `entrada` (k8s/cluster/gateway).
+    entrada/rutas: permitidas
