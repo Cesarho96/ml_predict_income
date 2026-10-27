@@ -2,6 +2,7 @@
 #
 #   PR hacia main   →  lint + pruebas  →  build + checks de la imagen + escaneo   (no publica)
 #                      DAGs de Airflow (en paralelo, con Airflow real)
+#                      manifiestos de Kubernetes (en paralelo, sin cluster)
 #   push a main     →  lo mismo        →  … y publica en ECR con tag = commit
 #
 # Orden a propósito: lo barato primero. Ruff tarda segundos y pytest ~1 minuto; construir
@@ -98,6 +99,60 @@ jobs:
         env:
           AIRFLOW_HOME: ${{ runner.temp }}/airflow
         run: python -m pytest -q airflow/tests
+
+  # ------------------------------------------------------------------ 2b. Kubernetes
+  # Los manifiestos de k8s/ se RENDERIZAN como lo haría `kubectl apply -k` y se validan
+  # contra el esquema de la API de Kubernetes (la versión del cluster) y de Gateway API.
+  # Atrapa en segundos lo que si no aparece al aplicar: un campo mal escrito
+  # (`periodSecond`), un tipo equivocado, un recurso que no existe. `-strict` rechaza
+  # campos desconocidos; sin eso, un typo se ignora en silencio y la probe no existe.
+  # No necesita cluster. Lo que NO prueba: que la app arranque ni que el cluster acepte
+  # los pods (Pod Security). Eso sería un e2e con kind.
+  manifiestos:
+    name: Manifiestos de Kubernetes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      KUSTOMIZE_VERSION: v5.8.1
+      KUSTOMIZE_SHA256: 029a7f0f4e1932c52a0476cf02a0fd855c0bb85694b82c338fc648dcb53a819d
+      KUBECONFORM_VERSION: v0.8.0
+      KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+      # La del cluster: kind v0.33 → Kubernetes 1.37 (k8s/kind.yaml). Se suben juntas.
+      K8S_VERSION: "1.37.0"
+      # Esquemas de las CRDs (Gateway API), fijados a un commit del catálogo.
+      CRDS: https://raw.githubusercontent.com/datreeio/CRDs-catalog/3eb90d47aba8d61919d4419dd38301536e32a94b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Binarios fijados por versión Y por sha256: si lo descargado no es exactamente lo
+      # revisado, el job falla antes de ejecutarlo (la misma idea que las Actions por SHA).
+      - name: Instalar kustomize y kubeconform
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP" && mkdir -p bin
+          curl -sSfL -o kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o kubeconform.tgz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          printf '%s  kustomize.tgz\n%s  kubeconform.tgz\n' "$KUSTOMIZE_SHA256" "$KUBECONFORM_SHA256" | sha256sum -c -
+          tar -xzf kustomize.tgz -C bin kustomize
+          tar -xzf kubeconform.tgz -C bin kubeconform
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Renderizar y validar
+        run: |
+          set -euo pipefail
+          valida() {
+            kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" \
+              -schema-location default \
+              -schema-location "$CRDS/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" "$@"
+          }
+          for dir in k8s/api k8s/cluster/gateway k8s/cluster/metrics-server; do
+            echo "::group::$dir"
+            kustomize build "$dir" | valida -
+            echo "::endgroup::"
+          done
+          valida k8s/pruebas/*.yaml
 
   # ------------------------------------------------------------------ 3. imagen
   imagen:
