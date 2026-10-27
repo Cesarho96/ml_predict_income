@@ -1,0 +1,20 @@
+# Cluster local de Kubernetes para el Hito 6.
+#
+#     kind create cluster --config k8s/kind.yaml
+#     kind delete cluster --name ml-predict-income
+#
+# kind = "Kubernetes IN Docker": cada NODO del cluster es un contenedor de Docker, y
+# dentro de él corre un Kubernetes completo (API server, etcd, scheduler, kubelet,
+# containerd). Sirve para aprender y para probar manifiestos en CI; en producción los
+# nodos serían máquinas (p. ej. EKS en AWS) y los manifiestos de k8s/ no cambiarían.
+#
+# El cluster es desechable a propósito: todo lo que importa vive en este directorio, en
+# git. Si algo se descompone, se borra y se crea de nuevo en ~1 minuto.
+#
+# Sin `image:` → kind usa la imagen de nodo fijada (por digest) para su propia versión:
+# fijar la versión de kind fija la versión de Kubernetes.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ml-predict-income
+nodes:
+  - role: control-plane   # un solo nodo: hace de plano de control y también corre pods

@@ -1,0 +1,20 @@
+# metrics-server: mide CPU y memoria de cada pod cada ~15 s. Es lo que muestra
+# `kubectl top` y lo que lee el HPA para decidir cuántas réplicas hacen falta.
+# Los clusters administrados (EKS, GKE) lo traen o lo ofrecen como add-on; kind no.
+#
+#     kubectl apply -k k8s/cluster/metrics-server
+#
+# Es parte del CLUSTER, no de la app: por eso vive aquí y no en k8s/api. La versión va
+# fijada en la URL, igual que las imágenes por digest y las Actions por SHA.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/components.yaml
+patches:
+  # Sólo para kind: sus kubelets usan certificados autofirmados y metrics-server se niega
+  # a hablarles sin esta opción. En un cluster real (EKS) NO se usa.
+  - target: {kind: Deployment, name: metrics-server, namespace: kube-system}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --kubelet-insecure-tls

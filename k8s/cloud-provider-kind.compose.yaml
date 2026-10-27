@@ -1,0 +1,35 @@
+# cloud-provider-kind: le da a kind lo que en la nube da el proveedor (AWS, GCP):
+#   · Services de tipo LoadBalancer con una IP propia,
+#   · un controlador de Gateway API (GatewayClass `cloud-provider-kind`), que instala
+#     también las definiciones (CRDs) de Gateway, HTTPRoute, etc.
+#
+#     docker compose -f k8s/cloud-provider-kind.compose.yaml up -d
+#     docker compose -f k8s/cloud-provider-kind.compose.yaml logs -f
+#
+# Corre FUERA del cluster, como contenedor junto a los nodos de kind (red `kind`). Por
+# cada Gateway arranca un contenedor de Envoy (`kindccm-…`) que recibe el tráfico.
+#
+# En Windows/Mac las IPs de la red de kind no son alcanzables desde tu máquina:
+# --enable-lb-port-mapping publica cada Envoy en un puerto de localhost (efímero: se ve
+# con `docker ps --filter name=kindccm`).
+#
+# Excepción consciente a la regla del Hito 5 (Airflow sólo ve Docker a través de un
+# proxy): éste monta el socket de Docker completo, porque crea contenedores con puertos
+# publicados. Es una herramienta local de kubernetes-sigs con versión fijada; en un
+# cluster real este papel lo juega el proveedor de la nube, no un contenedor así.
+#
+# Archivo aparte del docker-compose.yml principal a propósito: la red `kind` sólo existe
+# mientras hay un cluster, y declararla allí rompería `docker compose up` sin cluster.
+name: ml-predict-income-k8s
+
+services:
+  cloud-provider-kind:
+    image: registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v0.11.1@sha256:40e18b9cd9c798cce40d39ff5c099a4f16a36c268d8e1dda469d73955a35e403
+    command: ["--enable-lb-port-mapping"]
+    networks: [kind]
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+    restart: unless-stopped
+
+networks:
+  kind:
+    external: true      # la crea `kind create cluster`

@@ -1,0 +1,31 @@
+# Gateway API reparte el trabajo en tres objetos, uno por rol:
+#
+#   GatewayClass  "qué implementación"      → el proveedor (aquí cloud-provider-kind;
+#                                              en AWS sería el AWS Load Balancer Controller)
+#   Gateway       "dónde se escucha"        → plataforma: puertos, protocolos, TLS, y QUÉ
+#                                              namespaces pueden colgarle rutas (este archivo)
+#   HTTPRoute     "qué va a dónde"          → cada app: rutas hacia SU Service
+#                                              (k8s/api/ruta.yaml)
+#
+# El viejo Ingress mezclaba los tres en un objeto, y lo no estándar (timeouts, reescrituras)
+# vivía en anotaciones propias de cada controlador. ingress-nginx, el controlador más
+# usado, se retiró en marzo de 2026; Gateway API es su reemplazo oficial.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: entrada
+  namespace: entrada
+spec:
+  gatewayClassName: cloud-provider-kind
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      # Sólo los namespaces con esta etiqueta pueden publicar rutas aquí. Sin esto,
+      # cualquier app del cluster podría secuestrar tráfico de la puerta de entrada.
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              entrada/rutas: permitidas

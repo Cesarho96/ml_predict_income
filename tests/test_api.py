@@ -28,7 +28,9 @@ def client():
 
 
 def test_health_no_depende_de_los_modelos(client):
-    assert client.get("/health").status_code == 200
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json()["commit"]        # qué código responde (GIT_SHA de la imagen)
 
 
 def test_ready_reporta_los_dos_modelos_y_su_version(client):

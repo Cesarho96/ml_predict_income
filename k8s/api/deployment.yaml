@@ -1,0 +1,97 @@
+# La API como Deployment: "que siempre haya N copias de este pod, con esta imagen".
+# El controlador de Deployments compara esto con lo que existe y corrige la diferencia.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  revisionHistoryLimit: 5       # versiones anteriores guardadas para `rollout undo`
+  selector:
+    matchLabels:
+      app: api                  # "mis pods son los que tienen esta etiqueta"
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1               # al actualizar, se crea UN pod nuevo de más…
+      maxUnavailable: 0         # …y no se quita uno viejo hasta que el nuevo esté listo
+  template:                     # el molde de cada pod
+    metadata:
+      labels:
+        app: api
+    spec:
+      # La API no habla con Kubernetes: no se le dan credenciales del cluster.
+      automountServiceAccountToken: false
+      securityContext:
+        # La imagen dice `USER app` (un nombre). Kubernetes no puede comprobar que un
+        # nombre no sea root, así que con runAsNonRoot exige el UID numérico.
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault  # filtra llamadas al kernel que una API web nunca usa
+      containers:
+        - name: api
+          image: ml-predict-income   # el tag lo pone kustomization.yaml (un solo lugar)
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: api-config     # todas las variables de config.yaml
+          resources:
+            # requests = lo que el scheduler RESERVA en el nodo para este pod. Es con lo
+            # que decide dónde cabe, y la base del HPA (% de CPU = uso / request).
+            requests:
+              cpu: 250m              # 250 milicores = un cuarto de CPU
+              memory: 512Mi
+            # limits = el techo. Pasar el de memoria mata el contenedor (OOMKilled);
+            # pasar el de CPU sólo lo frena. Mismos valores que en compose (Hito 1).
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          # --- Probes: las ejecuta el kubelet del nodo, no la app ---------------------
+          # startup: el arranque descarga los modelos del registry y uvicorn no responde
+          # nada hasta terminar. Mientras ésta no pase, las otras dos no corren. Hasta
+          # 36 × 5 s = 3 min antes de darlo por fallido y reiniciar.
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 36
+          # liveness: ¿el proceso está vivo? Si falla 3 veces seguidas, se REINICIA el
+          # contenedor. Por eso /health no depende de nada externo: si MLflow se cae, no
+          # queremos reiniciar pods que ya tienen el modelo cargado.
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # readiness: ¿le mando tráfico? Si falla, el pod NO se reinicia: sólo sale del
+          # Service hasta que vuelva a pasar.
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          # Al apagar un pod, sacarlo del Service y mandarle SIGTERM ocurren a la vez:
+          # unos instantes, todavía le llegan peticiones. Esperar 5 s antes de apagar
+          # evita esos errores. Sin esto no hay "rollout sin caída".
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true     # = read_only: true en compose
+            capabilities:
+              drop: [ALL]                    # = cap_drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp                # HOME y la caché del modelo (MODEL_CACHE_DIR)
+      volumes:
+        # emptyDir = carpeta vacía que nace y muere con el pod (= tmpfs en compose).
+        # Cada pod nuevo descarga el modelo otra vez: la fuente de verdad es el registry.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi

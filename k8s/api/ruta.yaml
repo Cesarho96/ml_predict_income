@@ -1,0 +1,22 @@
+# Lo que la API declara sobre la puerta de entrada: "el tráfico que llegue al Gateway
+# `entrada` va a mi Service `api`". El equipo de la app controla esto sin tocar el
+# Gateway; el Gateway decide si lo acepta (allowedRoutes → etiqueta del namespace).
+#
+# Sin `hostnames`: acepta cualquier Host, porque en local se entra por localhost:<puerto>.
+# En producción iría `hostnames: ["api.tu-dominio.com"]`, y probablemente sólo /predict
+# público: /ready dice qué modelo y qué run sirve cada pod, información interna.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api
+spec:
+  parentRefs:
+    - name: entrada
+      namespace: entrada
+      sectionName: http          # el listener del Gateway
+  rules:
+    - matches:
+        - path: {type: PathPrefix, value: /}
+      backendRefs:
+        - name: api              # el Service, no los pods: el Service sigue repartiendo
+          port: 80

@@ -1,0 +1,15 @@
+# PodDisruptionBudget: cuántos pods de la API pueden faltar A LA VEZ por una interrupción
+# VOLUNTARIA (vaciar un nodo para actualizarlo, el autoscaler de nodos retirando uno).
+# Kubernetes espera antes de desalojar otro pod si con eso se rompería el límite.
+#
+# No protege de fallas (un nodo que muere, un OOMKilled): para eso están las réplicas.
+# Tampoco gobierna los rollouts: ésos los controlan maxSurge/maxUnavailable del Deployment.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+spec:
+  maxUnavailable: 1     # con 2 réplicas siempre queda 1; con 4 (HPA) quedan 3
+  selector:
+    matchLabels:
+      app: api

@@ -1,0 +1,12 @@
+# Pod Security Admission: el namespace RECHAZA cualquier pod que no cumpla el perfil
+# "restricted" (no-root, sin escalar privilegios, sin capabilities, seccomp). Las reglas
+# de seguridad dejan de ser una convención que alguien puede olvidar: el cluster las exige.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ml-predict-income
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    # Permiso para colgar rutas en el Gateway `entrada` (k8s/cluster/gateway).
+    entrada/rutas: permitidas

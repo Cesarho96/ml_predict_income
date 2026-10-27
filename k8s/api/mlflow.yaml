@@ -1,0 +1,25 @@
+# MLflow NO vive en el cluster: es el servicio de docker-compose (el mismo registry que
+# usa Airflow). Así se ve en una empresa: el registry es un servicio compartido y el
+# cluster de serving sólo lo consume.
+#
+# Un Service de tipo ExternalName no balancea nada: es un alias de DNS. Dentro del
+# namespace, el nombre `mlflow` se resuelve a `host.docker.internal` (tu máquina, vista
+# desde los contenedores de Docker Desktop), donde compose publica el puerto 5000.
+#
+# Por qué un alias y no poner host.docker.internal en la configuración de la API:
+#   · La API sigue usando http://mlflow:5000, igual que en compose. Dónde vive MLflow es
+#     asunto del cluster, no de la aplicación.
+#   · El servidor de MLflow sólo acepta el Host "mlflow:5000" (--allowed-hosts en docker/mlflow/Dockerfile).
+#     Con el alias el cliente sigue mandando ese Host; con la otra opción, MLflow
+#     respondería 403.
+#   · Si mañana MLflow se mueve al cluster (o a un servicio administrado), se cambia este
+#     archivo y nada más.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 5000       # informativo: un ExternalName no traduce puertos
