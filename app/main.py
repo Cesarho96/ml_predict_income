@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
 
+from app import metricas
 from src.predictor import Predictor, segmento_de
 
 logging.basicConfig(
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
     # orquestador lo ve y lo reinicia. Ver la decisión 3 en src/predictor.py.
     log.info("resolviendo y cargando modelos…")
     predictor.cargar()
+    metricas.registrar_arranque(predictor.modelos, APP_VERSION, COMMIT)
     log.info("modelos listos: %s",
              ", ".join(m.etiqueta for m in predictor.modelos.values()))
     yield
@@ -51,6 +53,7 @@ app = FastAPI(
     version=APP_VERSION,
     lifespan=lifespan,
 )
+metricas.instrumentar(app)     # GET /metrics + medición de cada petición (Hito 7)
 
 
 # --------------------------------------------------------------------- esquemas
@@ -168,6 +171,7 @@ def predict(p: PeticionPrediccion):
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
 
+    metricas.registrar_prediccion(r.segmento, r.version, r.mediana)
     return RespuestaPrediccion(
         segmento=r.segmento, inferior=r.inferior, mediana=r.mediana, superior=r.superior,
         moneda=r.moneda, periodo=r.periodo, cobertura=r.cobertura,
