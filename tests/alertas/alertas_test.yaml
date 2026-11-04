@@ -1,0 +1,83 @@
+# Pruebas de las alertas de k8s/api/alertas.yaml con promtool (las corre CI).
+#
+#   yq '.spec' k8s/api/alertas.yaml > reglas.yaml && promtool test rules alertas_test.yaml
+#
+# Series de tiempo SINTÉTICAS: `'1x30'` = el valor 1 repetido 30 intervalos; `'0+100x20'` =
+# empieza en 0 y sube 100 por intervalo (un contador). Se prueba que la alerta dispare
+# cuando debe, que NO dispare antes del `for`, y que no dispare por debajo del umbral.
+rule_files: [reglas.yaml]
+evaluation_interval: 1m
+
+tests:
+  - name: ModelosMezclados espera 15 min y nombra el segmento
+    interval: 1m
+    input_series:
+      - series: 'income_model_info{namespace="ml-predict-income", pod="a", segment="ocupados", version="4"}'
+        values: '1x30'
+      - series: 'income_model_info{namespace="ml-predict-income", pod="b", segment="ocupados", version="5"}'
+        values: '1x30'
+      - series: 'income_model_info{namespace="ml-predict-income", pod="a", segment="no_ocupados", version="4"}'
+        values: '1x30'
+      - series: 'income_model_info{namespace="ml-predict-income", pod="b", segment="no_ocupados", version="4"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 10m          # mezcla de 10 min: puede ser un despliegue, todavía no
+        alertname: ModelosMezclados
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ModelosMezclados
+        exp_alerts:
+          - exp_labels: {severity: warning, namespace: ml-predict-income, segment: ocupados}
+            exp_annotations:
+              summary: "Los pods sirven 2 versiones distintas del modelo ocupados"
+              description: "Se movió @champion y los pods viejos siguen con la versión anterior. Si fue a propósito: kubectl rollout restart deploy/api -n ml-predict-income"
+
+  - name: ApiReplicasInsuficientes dispara tras 2 min con 1 pod
+    interval: 1m
+    input_series:
+      - series: 'kube_deployment_status_replicas_available{namespace="ml-predict-income", deployment="api"}'
+        values: '2 2 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ApiReplicasInsuficientes
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ApiReplicasInsuficientes
+        exp_alerts:
+          - exp_labels: {severity: warning, namespace: ml-predict-income, deployment: api}
+            exp_annotations:
+              summary: "La API tiene 1 pod(s) listo(s); el mínimo es 2"
+              description: "kubectl get pods -n ml-predict-income; si uno reinicia: kubectl logs --previous (¿MLflow arriba?)"
+
+  - name: ApiErrores5xx dispara con 5% y no con 0.5%
+    interval: 1m
+    input_series:
+      # Caso A: 100 OK y 5 errores por minuto → 4.8%
+      - series: 'http_requests_total{namespace="ml-predict-income", route="/predict", status="200", pod="a"}'
+        values: '0+100x20'
+      - series: 'http_requests_total{namespace="ml-predict-income", route="/predict", status="500", pod="a"}'
+        values: '0+5x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ApiErrores5xx
+        exp_alerts:
+          - exp_labels: {severity: critical, namespace: ml-predict-income}
+            exp_annotations:
+              summary: "Más del 1% de /predict responde 5xx"
+              description: "4.762% de errores durante 5 min. kubectl logs -n ml-predict-income deploy/api"
+
+  - name: ApiErrores5xx no dispara bajo el umbral
+    interval: 1m
+    input_series:
+      # Caso B: 200 OK y 1 error por minuto → 0.5%: ruido, no un incidente
+      - series: 'http_requests_total{namespace="ml-predict-income", route="/predict", status="200", pod="a"}'
+        values: '0+200x20'
+      - series: 'http_requests_total{namespace="ml-predict-income", route="/predict", status="500", pod="a"}'
+        values: '0+1x20'
+      # Los 422 no cuentan como error de la API
+      - series: 'http_requests_total{namespace="ml-predict-income", route="/predict", status="422", pod="a"}'
+        values: '0+50x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ApiErrores5xx
+        exp_alerts: []

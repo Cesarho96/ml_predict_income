@@ -1,0 +1,21 @@
+# ServiceMonitor: "Prometheus, lee /metrics de los pods detrás de este Service".
+#
+# No es un objeto de Kubernetes sino del Prometheus Operator (una CRD que instala
+# kube-prometheus-stack). El operador lo traduce a configuración de Prometheus: nadie
+# edita prometheus.yml a mano. Cuando el HPA agrega un pod, el Service lo incluye y
+# Prometheus lo empieza a leer solo, sin tocar nada.
+#
+# Vive con la app (k8s/api), no con Prometheus: el equipo que escribe /metrics declara
+# también cómo se lee. Requiere kube-prometheus-stack instalado (k8s/cluster/monitoreo).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api
+spec:
+  selector:
+    matchLabels:
+      app: api            # Services con esta etiqueta, en el namespace de este objeto
+  endpoints:
+    - port: http          # el puerto con nombre del Service (→ 8000 del contenedor)
+      path: /metrics
+      interval: 15s

@@ -21,9 +21,23 @@ resources:
   - hpa.yaml
   - pdb.yaml
   - ruta.yaml
+  - monitor.yaml
+  - alertas.yaml
+
+# El dashboard de Grafana como ConfigMap con la etiqueta que el sidecar de Grafana busca
+# (k8s/cluster/monitoreo/values.yaml). Grafana lo carga solo; el JSON vive en git.
+# Sin sufijo de hash: un nombre estable evita dashboards duplicados al cambiar el JSON.
+configMapGenerator:
+  - name: dashboard-api
+    files:
+      - dashboards/api.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
 
 # QUÉ versión de la API corre en el cluster: una línea. Cambiarla y hacer `apply` es un
 # despliegue; el tag es el commit (inmutable, igual que en ECR).
 images:
   - name: ml-predict-income
-    newTag: "3f055bc"   # entre comillas: un sha como 1234567 o 12e4567 se leería como número
+    newTag: "7879b53"   # entre comillas: un sha como 1234567 o 12e4567 se leería como número

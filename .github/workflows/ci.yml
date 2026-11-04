@@ -117,6 +117,9 @@ jobs:
       KUSTOMIZE_SHA256: 029a7f0f4e1932c52a0476cf02a0fd855c0bb85694b82c338fc648dcb53a819d
       KUBECONFORM_VERSION: v0.8.0
       KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+      # promtool (viene con Prometheus): revisa y PRUEBA las alertas (Hito 7).
+      PROMETHEUS_VERSION: "3.15.1"
+      PROMETHEUS_SHA256: 6a726885328ad9efebbf36e876ce2fb6225468a71fd1e7ce3ba666d5f4d97a84
       # La del cluster: kind v0.33 → Kubernetes 1.37 (k8s/kind.yaml). Se suben juntas.
       K8S_VERSION: "1.37.0"
       # Esquemas de las CRDs (Gateway API), fijados a un commit del catálogo.
@@ -128,7 +131,7 @@ jobs:
 
       # Binarios fijados por versión Y por sha256: si lo descargado no es exactamente lo
       # revisado, el job falla antes de ejecutarlo (la misma idea que las Actions por SHA).
-      - name: Instalar kustomize y kubeconform
+      - name: Instalar kustomize, kubeconform y promtool
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP" && mkdir -p bin
@@ -137,6 +140,9 @@ jobs:
           printf '%s  kustomize.tgz\n%s  kubeconform.tgz\n' "$KUSTOMIZE_SHA256" "$KUBECONFORM_SHA256" | sha256sum -c -
           tar -xzf kustomize.tgz -C bin kustomize
           tar -xzf kubeconform.tgz -C bin kubeconform
+          curl -sSfL -o prometheus.tgz "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+          echo "${PROMETHEUS_SHA256}  prometheus.tgz" | sha256sum -c -
+          tar -xzf prometheus.tgz -C bin --strip-components=1 "prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Renderizar y validar
@@ -152,7 +158,19 @@ jobs:
             kustomize build "$dir" | valida -
             echo "::endgroup::"
           done
-          valida k8s/pruebas/*.yaml
+          valida k8s/pruebas/*.yaml k8s/cluster/monitoreo/namespace.yaml
+          # El dashboard es JSON dentro de un ConfigMap: kubeconform no lo abre.
+          python3 -m json.tool k8s/api/dashboards/api.json > /dev/null
+
+      # Las alertas son código: tienen pruebas. promtool alimenta series sintéticas y
+      # comprueba que cada alerta dispare cuando debe y NO antes ni por debajo del umbral.
+      - name: Probar las alertas
+        run: |
+          set -euo pipefail
+          yq '.spec' k8s/api/alertas.yaml > "$RUNNER_TEMP/reglas.yaml"
+          cp tests/alertas/alertas_test.yaml "$RUNNER_TEMP/"
+          promtool check rules "$RUNNER_TEMP/reglas.yaml"
+          promtool test rules "$RUNNER_TEMP/alertas_test.yaml"
 
   # ------------------------------------------------------------------ 3. imagen
   imagen:

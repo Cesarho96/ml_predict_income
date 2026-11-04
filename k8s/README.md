@@ -16,7 +16,8 @@ tu máquina ──▶ localhost:<puerto> ──▶ Envoy (Gateway `entrada`) ─
 | `cloud-provider-kind.compose.yaml` | LoadBalancer + controlador de Gateway API para kind | (en la nube: el proveedor) |
 | `cluster/metrics-server/` | métricas de CPU/memoria (`kubectl top`, HPA) | plataforma |
 | `cluster/gateway/` | la puerta de entrada y qué namespaces pueden publicar rutas | plataforma |
-| `api/` | la app: Deployment, Service, HPA, PDB, ruta, config, alias de MLflow | equipo de la app |
+| `cluster/monitoreo/` | Prometheus + Grafana (Helm: kube-prometheus-stack) | plataforma |
+| `api/` | la app: Deployment, Service, HPA, PDB, ruta, config, alias de MLflow, ServiceMonitor, alertas, dashboard | equipo de la app |
 | `pruebas/` | tráfico y carga desde dentro del cluster (no son parte de la app) | — |
 
 ## Requisitos (Windows)
@@ -24,7 +25,7 @@ tu máquina ──▶ localhost:<puerto> ──▶ Envoy (Gateway `entrada`) ─
 - Docker Desktop con **cgroups v2**: `docker info --format "{{.CgroupVersion}}"` → `2`.
   Si dice `1`, en `%USERPROFILE%\.wslconfig`: `[wsl2]` / `kernelCommandLine = cgroup_no_v1=all`,
   luego `wsl --shutdown`. Kubernetes ≥ 1.35 no arranca sobre cgroups v1.
-- `winget install Kubernetes.kind` y `winget install Kubernetes.kubectl`.
+- `winget install Kubernetes.kind`, `winget install Kubernetes.kubectl` y `winget install Helm.Helm`.
 - **kubectl ≥ 1.36** (el cluster es 1.37). Docker Desktop trae un kubectl viejo que gana en
   el PATH: `where.exe kubectl` debe listar primero el de WinGet. Un cliente viejo no falla:
   descarta en silencio los campos que no conoce (así se rompió `rollout undo` con `preStop.sleep`).
@@ -44,6 +45,13 @@ kind load docker-image ml-predict-income:$tag --name ml-predict-income
 docker compose -f k8s/cloud-provider-kind.compose.yaml up -d  # antes de api/: instala las CRDs
 kubectl apply -k k8s/cluster/metrics-server
 kubectl apply -k k8s/cluster/gateway
+
+# Monitoreo, antes de api/: instala las CRDs ServiceMonitor y PrometheusRule
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+kubectl apply -f k8s/cluster/monitoreo/namespace.yaml
+helm upgrade --install monitoreo prometheus-community/kube-prometheus-stack `
+  --version 92.14.1 -n monitoreo -f k8s/cluster/monitoreo/values.yaml --wait --timeout 10m
+
 kubectl apply -k k8s/api
 
 kubectl get pods -n ml-predict-income -w                      # 2 pods 1/1
@@ -68,6 +76,21 @@ kubectl rollout undo deploy/api -n ml-predict-income          # palanca de emerg
 Para comprobar que no se cae ni una petición: `kubectl apply -f k8s/pruebas/trafico.yaml`
 y `kubectl logs -f -n ml-predict-income trafico` durante el despliegue.
 
+## Monitoreo
+
+```powershell
+kubectl port-forward -n monitoreo svc/monitoreo-kube-prometheus-prometheus 9090:9090   # Prometheus
+kubectl port-forward -n monitoreo svc/monitoreo-grafana 3000:80                        # Grafana
+# contraseña de admin de Grafana al portapapeles (sin imprimirla):
+$p = kubectl get secret -n monitoreo monitoreo-grafana -o jsonpath="{.data.admin-password}"
+[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p)) | Set-Clipboard
+```
+
+- Prometheus → Status → Target health: `serviceMonitor/ml-predict-income/api/0`, un endpoint por pod.
+- Grafana → dashboard **API de ingreso — servicio y modelo** (`api/dashboards/api.json`).
+  Se edita en git, no en la UI: lo hecho en la UI se pierde al recrear el pod.
+- Alertas: `api/alertas.yaml`, probadas con promtool (`tests/alertas/`, en CI).
+
 ## Trampas que ya aparecieron
 
 | Síntoma | Causa |
@@ -79,6 +102,7 @@ y `kubectl logs -f -n ml-predict-income trafico` durante el despliegue.
 | un pod se reinicia al quitar `replicas` | el Deployment y el HPA eran dueños del mismo campo |
 | la ruta da 404 | el namespace perdió la etiqueta `entrada/rutas: permitidas` (`describe httproute` → `NotAllowedByListeners`) |
 | `port-forward` se cae en un rollout | es un túnel a UN pod; para probar, tráfico al Service desde dentro |
+| Prometheus no lee el ServiceMonitor | el chart sólo lee los que llevan `release: monitoreo`; `values.yaml` lo desactiva (`*SelectorNilUsesHelmValues: false`) |
 
 ## Apagar
 

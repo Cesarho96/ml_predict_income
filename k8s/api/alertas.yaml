@@ -1,0 +1,75 @@
+# Alertas de la API (Hito 7). Una PrometheusRule es una CRD del Prometheus Operator:
+# Prometheus la carga sola, igual que el ServiceMonitor. Vive con la app porque quien
+# conoce el servicio sabe qué es "anormal" en él.
+#
+# Cada regla: una expresión PromQL + `for` (cuánto tiempo seguido debe cumplirse antes
+# de disparar). El `for` evita alertar por un pico de 15 segundos: una alerta que suena
+# por nada enseña a ignorar alertas. Estados: inactive → pending (se cumple, esperando
+# el `for`) → firing.
+#
+# Las reglas tienen pruebas: tests/alertas/alertas_test.yaml (promtool, corre en CI).
+# Sin Alertmanager todavía: se ven en Prometheus (Alerts) y en Grafana; nadie recibe un
+# aviso. Enviarlas (Slack, correo) es configuración de Alertmanager, no de estas reglas.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: api
+spec:
+  groups:
+    - name: api.servicio
+      rules:
+        - alert: ApiLatenciaAlta
+          # Medido en el Hito 6: p95 ≈ 240 ms con 4 pods bajo carga. 500 ms es el doble:
+          # algo cambió (un modelo más pesado, CPU estrangulada, un nodo saturado).
+          expr: |
+            histogram_quantile(0.95,
+              sum by (namespace, le) (rate(http_request_duration_seconds_bucket{namespace="ml-predict-income", route="/predict"}[5m]))
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "p95 de /predict sobre 500 ms"
+            description: "p95 = {{ $value | humanizeDuration }} durante 5 min. Revisar CPU por pod contra su límite y si el HPA llegó a su máximo."
+        - alert: ApiErrores5xx
+          # Sólo 5xx: un 422 es el contrato rechazando una entrada inválida, la API
+          # haciendo su trabajo. Un 500 es la API fallando.
+          expr: |
+            sum by (namespace) (rate(http_requests_total{namespace="ml-predict-income", route="/predict", status=~"5.."}[5m]))
+              /
+            sum by (namespace) (rate(http_requests_total{namespace="ml-predict-income", route="/predict"}[5m]))
+              > 0.01
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Más del 1% de /predict responde 5xx"
+            description: "{{ $value | humanizePercentage }} de errores durante 5 min. kubectl logs -n ml-predict-income deploy/api"
+        - alert: ApiReplicasInsuficientes
+          # Menos de 2 pods listos = sin respaldo: el próximo reinicio es una caída.
+          # Causa más probable aquí: pods nuevos que no arrancan porque el registry
+          # (MLflow) no responde. Los pods vivos siguen sirviendo; los nuevos, no.
+          expr: kube_deployment_status_replicas_available{namespace="ml-predict-income", deployment="api"} < 2
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "La API tiene {{ $value }} pod(s) listo(s); el mínimo es 2"
+            description: "kubectl get pods -n ml-predict-income; si uno reinicia: kubectl logs --previous (¿MLflow arriba?)"
+    - name: api.modelo
+      rules:
+        - alert: ModelosMezclados
+          # Propia de servir modelos desde un registry: cada pod resuelve @champion AL
+          # ARRANCAR (Hito 3). Si alguien mueve el alias, sólo los pods nuevos toman la
+          # versión nueva: usuarios distintos reciben predicciones de modelos distintos.
+          # Normal durante un despliegue (minutos); no por 15.
+          expr: |
+            count by (namespace, segment) (
+              count by (namespace, segment, version) (income_model_info{namespace="ml-predict-income"})
+            ) > 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Los pods sirven {{ $value }} versiones distintas del modelo {{ $labels.segment }}"
+            description: "Se movió @champion y los pods viejos siguen con la versión anterior. Si fue a propósito: kubectl rollout restart deploy/api -n ml-predict-income"
