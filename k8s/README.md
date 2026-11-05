@@ -34,6 +34,7 @@ tu máquina ──▶ localhost:<puerto> ──▶ Envoy (Gateway `entrada`) ─
 
 ```powershell
 docker compose up -d mlflow                                   # el cluster depende de él
+python tasks.py predicciones                                  # registro de predicciones (Hito 7b)
 kind create cluster --config k8s/kind.yaml
 
 # La imagen que dice k8s/api/kustomization.yaml (newTag = commit del código).
@@ -52,6 +53,7 @@ kubectl apply -f k8s/cluster/monitoreo/namespace.yaml
 helm upgrade --install monitoreo prometheus-community/kube-prometheus-stack `
   --version 92.14.1 -n monitoreo -f k8s/cluster/monitoreo/values.yaml --wait --timeout 10m
 
+python tasks.py secreto-k8s                                   # Secret con la conexión (no va en git)
 kubectl apply -k k8s/api
 
 kubectl get pods -n ml-predict-income -w                      # 2 pods 1/1
@@ -102,6 +104,9 @@ $p = kubectl get secret -n monitoreo monitoreo-grafana -o jsonpath="{.data.admin
 | un pod se reinicia al quitar `replicas` | el Deployment y el HPA eran dueños del mismo campo |
 | la ruta da 404 | el namespace perdió la etiqueta `entrada/rutas: permitidas` (`describe httproute` → `NotAllowedByListeners`) |
 | `port-forward` se cae en un rollout | es un túnel a UN pod; para probar, tráfico al Service desde dentro |
+| `CreateContainerConfigError` en los pods de la API | falta el Secret `api-predicciones`: `python tasks.py secreto-k8s` |
+| la API no guarda predicciones (`prediction_log_dropped_total{reason="error_base"}` sube) | `predicciones-db` apagada, o el DSN apunta a :5432 (el ExternalName no traduce puertos: es :5433) |
+| `predicciones-db` arranca pero faltan los roles `api_escritura`/`lector` | el esquema sólo corre con el volumen VACÍO; si el primer arranque falló a la mitad, nunca vuelve a correr. Con la base vacía: `docker compose rm -sf predicciones-db`, `docker volume rm ml-predict-income_predicciones-db`, `python tasks.py predicciones` |
 | Prometheus no lee el ServiceMonitor | el chart sólo lee los que llevan `release: monitoreo`; `values.yaml` lo desactiva (`*SelectorNilUsesHelmValues: false`) |
 
 ## Apagar

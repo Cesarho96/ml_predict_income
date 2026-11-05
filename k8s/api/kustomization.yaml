@@ -15,6 +15,7 @@ namespace: ml-predict-income
 resources:
   - namespace.yaml
   - mlflow.yaml
+  - predicciones-db.yaml
   - config.yaml
   - deployment.yaml
   - service.yaml

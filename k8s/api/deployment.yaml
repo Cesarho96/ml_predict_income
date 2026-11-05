@@ -40,6 +40,16 @@ spec:
           envFrom:
             - configMapRef:
                 name: api-config     # todas las variables de config.yaml
+          env:
+            # Conexión al registro de predicciones (Hito 7b), desde un Secret que NO está
+            # en git (lo crea `tasks.py secreto-k8s`). Obligatorio a propósito: si falta,
+            # el pod no arranca (CreateContainerConfigError) y el error se ve al desplegar.
+            # Que la BASE se caiga después es otra cosa: la API sigue sirviendo.
+            - name: PREDICCIONES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: api-predicciones
+                  key: PREDICCIONES_DSN
           resources:
             # requests = lo que el scheduler RESERVA en el nodo para este pod. Es con lo
             # que decide dónde cabe, y la base del HPA (% de CPU = uso / request).

@@ -43,6 +43,19 @@ jobs:
     name: Lint y pruebas
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Un Postgres REAL para las pruebas del registro de predicciones (Hito 7b): las que
+    # usan un destino falso prueban la lógica; éstas, el esquema y los permisos de verdad.
+    services:
+      postgres:
+        image: postgres:16             # la misma que docker-compose.yml
+        env:
+          POSTGRES_USER: dueno
+          POSTGRES_PASSWORD: dueno-ci  # base efímera de CI: nada que proteger
+          POSTGRES_DB: predicciones
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dueno -d predicciones"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,7 +75,19 @@ jobs:
       - name: Lint (ruff)
         run: python tasks.py lint
 
+      # El MISMO archivo que ejecuta compose al crear la base: si el esquema o los
+      # permisos se rompen, falla aquí y no en tu máquina.
+      - name: Esquema del registro de predicciones
+        env:
+          PGPASSWORD: dueno-ci
+          PREDICCIONES_API_PASSWORD: api-ci
+          PREDICCIONES_LECTOR_PASSWORD: lector-ci
+        run: psql -v ON_ERROR_STOP=1 -h localhost -U dueno -d predicciones -f docker/predicciones/initdb/01-esquema.sql
+
       - name: Pruebas (pytest — modelos sintéticos, sin datos ni MLflow)
+        env:
+          PREDICCIONES_DSN_PRUEBA: postgresql://api_escritura:api-ci@localhost:5432/predicciones
+          PREDICCIONES_DSN_LECTOR_PRUEBA: postgresql://lector:lector-ci@localhost:5432/predicciones
         run: python tasks.py test
 
   # ------------------------------------------------------------------ 2. DAGs

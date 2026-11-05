@@ -56,6 +56,20 @@ spec:
           annotations:
             summary: "La API tiene {{ $value }} pod(s) listo(s); el mínimo es 2"
             description: "kubectl get pods -n ml-predict-income; si uno reinicia: kubectl logs --previous (¿MLflow arriba?)"
+    - name: api.registro
+      rules:
+        - alert: PrediccionesPerdidas
+          # La API responde, pero lo que predice no se está guardando: el análisis de
+          # drift (7c) quedará con huecos. Un descarte suelto al apagar un pod no debe
+          # despertar a nadie; uno sostenido por 5 min, sí.
+          expr: |
+            sum by (namespace) (rate(prediction_log_dropped_total{namespace="ml-predict-income"}[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Se están perdiendo predicciones del registro"
+            description: '{{ printf "%.1f" $value }} predicciones/s sin guardar. ¿predicciones-db arriba? docker compose ps predicciones-db; motivo: prediction_log_dropped_total por reason'
     - name: api.modelo
       rules:
         - alert: ModelosMezclados

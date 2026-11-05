@@ -66,6 +66,35 @@ tests:
               summary: "Más del 1% de /predict responde 5xx"
               description: "4.762% de errores durante 5 min. kubectl logs -n ml-predict-income deploy/api"
 
+  - name: PrediccionesPerdidas dispara si se descarta de forma sostenida
+    interval: 1m
+    input_series:
+      - series: 'prediction_log_dropped_total{namespace="ml-predict-income", pod="a", reason="error_base"}'
+        values: '0+30x15'          # 30 por minuto = 0.5 por segundo
+      - series: 'prediction_log_dropped_total{namespace="ml-predict-income", pod="a", reason="cola_llena"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PrediccionesPerdidas
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: PrediccionesPerdidas
+        exp_alerts:
+          - exp_labels: {severity: warning, namespace: ml-predict-income}
+            exp_annotations:
+              summary: "Se están perdiendo predicciones del registro"
+              description: "0.5 predicciones/s sin guardar. ¿predicciones-db arriba? docker compose ps predicciones-db; motivo: prediction_log_dropped_total por reason"
+
+  - name: PrediccionesPerdidas no dispara si no se pierde nada
+    interval: 1m
+    input_series:
+      - series: 'prediction_log_dropped_total{namespace="ml-predict-income", pod="a", reason="error_base"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: PrediccionesPerdidas
+        exp_alerts: []
+
   - name: ApiErrores5xx no dispara bajo el umbral
     interval: 1m
     input_series:
