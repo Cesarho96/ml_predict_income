@@ -41,4 +41,4 @@ configMapGenerator:
 # despliegue; el tag es el commit (inmutable, igual que en ECR).
 images:
   - name: ml-predict-income
-    newTag: "7879b53"   # entre comillas: un sha como 1234567 o 12e4567 se leería como número
+    newTag: "645b62d"   # entre comillas: un sha como 1234567 o 12e4567 se leería como número

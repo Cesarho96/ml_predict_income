@@ -107,6 +107,7 @@ $p = kubectl get secret -n monitoreo monitoreo-grafana -o jsonpath="{.data.admin
 | `CreateContainerConfigError` en los pods de la API | falta el Secret `api-predicciones`: `python tasks.py secreto-k8s` |
 | la API no guarda predicciones (`prediction_log_dropped_total{reason="error_base"}` sube) | `predicciones-db` apagada, o el DSN apunta a :5432 (el ExternalName no traduce puertos: es :5433) |
 | `predicciones-db` arranca pero faltan los roles `api_escritura`/`lector` | el esquema sólo corre con el volumen VACÍO; si el primer arranque falló a la mitad, nunca vuelve a correr. Con la base vacía: `docker compose rm -sf predicciones-db`, `docker volume rm ml-predict-income_predicciones-db`, `python tasks.py predicciones` |
+| tras reiniciar Docker Desktop, el puerto del Gateway da `ERR_EMPTY_RESPONSE` | el Envoy (`kindccm-…`) perdió su configuración y no encuentra a cloud-provider-kind: `docker logs kindccm-…` → `StreamAggregatedResources … Connection refused`. Arreglo: `docker compose -f k8s/cloud-provider-kind.compose.yaml restart` y `docker rm -f kindccm-…`; el controlador crea otro (con OTRO puerto: `docker ps --filter name=kindccm`) |
 | Prometheus no lee el ServiceMonitor | el chart sólo lee los que llevan `release: monitoreo`; `values.yaml` lo desactiva (`*SelectorNilUsesHelmValues: false`) |
 
 ## Apagar
