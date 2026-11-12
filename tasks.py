@@ -133,7 +133,7 @@ ENV_FILE = RAIZ / ".env"
 
 
 def _asegurar_env() -> dict[str, str]:
-    """Crea o completa `.env` con los secretos de Airflow. Nunca cambia uno que ya exista.
+    """Crea o completa `.env` con los secretos locales. Nunca cambia uno que ya exista.
 
     Por qué aquí y no en docker-compose.yml: un secreto escrito en un archivo versionado
     deja de ser secreto el día del primer push. `.env` está en .gitignore y docker compose
@@ -151,6 +151,10 @@ def _asegurar_env() -> dict[str, str]:
         # Fernet exige exactamente 32 bytes en base64 url-safe.
         "AIRFLOW_FERNET_KEY": lambda: base64.urlsafe_b64encode(os.urandom(32)).decode(),
         "AIRFLOW_ADMIN_PASSWORD": lambda: secrets.token_urlsafe(12),
+        # Registro de predicciones (Hito 7b): un rol por uso, cada uno con su contraseña.
+        "PREDICCIONES_DB_PASSWORD": lambda: secrets.token_urlsafe(24),
+        "PREDICCIONES_API_PASSWORD": lambda: secrets.token_urlsafe(24),
+        "PREDICCIONES_LECTOR_PASSWORD": lambda: secrets.token_urlsafe(24),
     }
     nuevos = {k: gen() for k, gen in generadores.items() if not actuales.get(k)}
     if nuevos:
@@ -158,7 +162,7 @@ def _asegurar_env() -> dict[str, str]:
         with ENV_FILE.open("a", encoding="utf-8") as f:
             if previo and not previo.endswith("\n"):
                 f.write("\n")
-            f.write("# Secretos de Airflow, generados por tasks.py. No se versiona (.gitignore).\n")
+            f.write("# Secretos locales, generados por tasks.py. No se versiona (.gitignore).\n")
             for k, v in nuevos.items():
                 f.write(f"{k}={v}\n")
         print(f"  .env: generé {', '.join(nuevos)}")
@@ -255,6 +259,36 @@ def up():
     print("la API no llegó a /ready. Últimos logs:")
     corre(*COMPOSE, "logs", "--tail", "25", "api", check=False)
     sys.exit(1)
+
+
+@tarea("levanta la base del registro de predicciones en 127.0.0.1:5433 (Hito 7b)")
+def predicciones():
+    _asegurar_env()
+    corre(*COMPOSE, "up", "-d", "--wait", "predicciones-db")
+    print("lista. Desde tu máquina: postgresql://lector:<PREDICCIONES_LECTOR_PASSWORD>"
+          "@127.0.0.1:5433/predicciones (la contraseña está en .env)")
+
+
+@tarea("crea o actualiza el Secret de Kubernetes con la conexión de la API (lee .env)")
+def secreto_k8s():
+    """El Secret `api-predicciones` en el namespace de la API, sin imprimir la contraseña.
+
+    `create --dry-run=client -o yaml | apply` es el patrón idempotente: `create` solo
+    falla si el Secret ya existe; así se crea la primera vez y se actualiza las demás.
+    El Secret nunca se escribe en un archivo del repo: sólo vive en el cluster.
+
+    Puerto 5433, no 5432: un Service ExternalName es un alias de DNS y NO traduce puertos.
+    El pod llega a tu máquina, donde compose publica Postgres en el 5433.
+    """
+    env = _asegurar_env()
+    dsn = (f"postgresql://api_escritura:{env['PREDICCIONES_API_PASSWORD']}"
+           "@predicciones-db:5433/predicciones")
+    yaml_secreto = subprocess.run(
+        ["kubectl", "create", "secret", "generic", "api-predicciones",
+         "-n", "ml-predict-income", f"--from-literal=PREDICCIONES_DSN={dsn}",
+         "--dry-run=client", "-o", "yaml"],
+        capture_output=True, text=True, check=True).stdout
+    subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml_secreto, text=True, check=True)
 
 
 @tarea("apaga todos los contenedores; los volúmenes (MLflow, Airflow) se conservan")

@@ -1,0 +1,16 @@
+# Namespace del monitoreo (Prometheus, Grafana, el operador). Lo creamos nosotros y no
+# `helm --create-namespace`, para declarar su política de seguridad.
+#
+# baseline y no restricted: el chart es de terceros y algunos de sus pods (sidecars,
+# jobs de certificados) no declaran todo lo que "restricted" exige. `warn: restricted`
+# muestra qué les falta sin bloquearlos. Lo que un chart ajeno trae no siempre cumple tu
+# estándar: hay que medirlo, no suponerlo.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoreo
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest

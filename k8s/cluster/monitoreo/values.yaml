@@ -1,0 +1,59 @@
+# kube-prometheus-stack ajustado a kind en una laptop. Sólo lo que cambia respecto a los
+# valores por omisión del chart, cada cambio con su porqué.
+#
+#   helm upgrade --install monitoreo prometheus-community/kube-prometheus-stack `
+#     --version 92.14.1 -n monitoreo -f k8s/cluster/monitoreo/values.yaml
+#
+# La versión del chart va FIJADA en el comando (y en k8s/README.md): sin --version, Helm
+# instala lo último que haya, con CRDs que pueden cambiar.
+
+# En kind estos componentes del plano de control escuchan sólo en el localhost del nodo:
+# Prometheus no los alcanza, aparecerían como objetivos caídos y con alertas falsas. En
+# EKS tampoco se ven: AWS administra el plano de control.
+kubeEtcd: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
+
+# node-exporter mide la MÁQUINA (disco, red) con acceso privilegiado al nodo: en Docker
+# Desktop/WSL falla al montar / y no aporta nada a la app. Las métricas de CPU y memoria
+# de cada contenedor siguen llegando, del kubelet.
+nodeExporter: {enabled: false}
+
+# Sin Alertmanager por ahora: las alertas se ven en Prometheus (/alerts). Alertmanager es
+# quien las ENVÍA (Slack, correo, PagerDuty); entra cuando haya a quién avisar.
+alertmanager: {enabled: false}
+
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    retention: 3d
+    # TRAMPA: por omisión Prometheus sólo lee los ServiceMonitors y PrometheusRules con
+    # la etiqueta `release: monitoreo`. Los nuestros viven en k8s/api (los escribe el
+    # equipo de la app) y no la llevan: sin esto, Prometheus los ignora EN SILENCIO.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests: {cpu: 100m, memory: 400Mi}
+      limits: {memory: 1Gi}
+
+grafana:
+  # Los dashboards viven en git (ConfigMaps que el sidecar carga), no en un disco: si el
+  # pod de Grafana se recrea, vuelven solos. Lo que se edite a mano en la UI se pierde.
+  persistence: {enabled: false}
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL   # cada app trae su dashboard en SU namespace
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+prometheusOperator:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}

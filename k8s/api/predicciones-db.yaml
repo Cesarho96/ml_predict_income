@@ -1,0 +1,17 @@
+# El registro de predicciones (Postgres en docker-compose), visto desde el cluster.
+# Igual que mlflow.yaml: un alias de DNS hacia tu máquina. Dónde vive la base es asunto
+# del cluster; la API sólo conoce el nombre `predicciones-db`.
+#
+# OJO con el puerto: un ExternalName NO traduce puertos. El pod se conecta a tu máquina
+# en el puerto que pida, y compose publica Postgres en el 5433. Por eso la conexión
+# (Secret `api-predicciones`, lo crea `tasks.py secreto-k8s`) dice :5433. Con MLflow no
+# se notó porque ahí ambos puertos son 5000.
+apiVersion: v1
+kind: Service
+metadata:
+  name: predicciones-db
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 5433       # informativo

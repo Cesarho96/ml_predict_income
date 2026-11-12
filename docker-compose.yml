@@ -100,6 +100,34 @@ services:
     mem_limit: 1g
     cpus: 1.0
 
+  # Registro de predicciones (Hito 7b): cada respuesta de /predict con sus features, su
+  # salida y la versión del modelo. Es la materia prima del drift (7c): sin ground truth
+  # en producción, lo único medible es QUÉ entra y QUÉ sale. `python tasks.py predicciones`
+  #
+  # Fuera del cluster, como MLflow: los datos viven en un volumen de Docker y sobreviven a
+  # borrar y recrear el cluster de kind. Los pods lo alcanzan por un alias de DNS
+  # (k8s/api/predicciones-db.yaml), igual que a MLflow.
+  predicciones-db:
+    image: postgres:16             # la misma de Airflow: una sola versión de Postgres
+    environment:
+      POSTGRES_USER: dueno
+      POSTGRES_PASSWORD: ${PREDICCIONES_DB_PASSWORD}
+      POSTGRES_DB: predicciones
+      # Las lee el script de esquema al crear los roles (docker/predicciones/initdb).
+      PREDICCIONES_API_PASSWORD: ${PREDICCIONES_API_PASSWORD}
+      PREDICCIONES_LECTOR_PASSWORD: ${PREDICCIONES_LECTOR_PASSWORD}
+    # 5433 y no 5432: no chocar con un Postgres que ya tengas instalado en Windows.
+    ports: ["127.0.0.1:5433:5432"]
+    volumes:
+      - predicciones-db:/var/lib/postgresql/data
+      # Se ejecuta SÓLO al primer arranque (volumen vacío). Ver el comentario del .sql.
+      - ./docker/predicciones/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "dueno", "-d", "predicciones"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
   # Llena los volúmenes que usan las tareas del DAG. Se corre con `python tasks.py preparar`.
   # Por qué volúmenes y no montar carpetas: las tareas las crea Airflow a través del API
   # de Docker, y ahí una ruta de Windows (D:\...) no significa nada.
@@ -228,3 +256,4 @@ volumes:
     name: ml-predict-income-crudos # microdatos de INEGI, sólo lectura para las tareas
   airflow-db:                      # metadatos de Airflow: corridas, historial, usuarios
   airflow-logs:                    # logs de cada tarea (se ven en la UI)
+  predicciones-db:                 # registro de predicciones (Hito 7b); NUNCA `down -v`

@@ -8,12 +8,17 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
 
+from app import metricas
+from app.registro import Registro, desde_entorno
 from src.predictor import Predictor, segmento_de
 
 logging.basicConfig(
@@ -24,6 +29,7 @@ log = logging.getLogger("api")
 
 APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
 COMMIT = os.getenv("GIT_SHA", "desconocido")      # lo graba el Dockerfile
+POD = os.getenv("HOSTNAME", "local")               # en Kubernetes, el nombre del pod
 predictor = Predictor()
 
 
@@ -35,10 +41,18 @@ async def lifespan(app: FastAPI):
     # orquestador lo ve y lo reinicia. Ver la decisión 3 en src/predictor.py.
     log.info("resolviendo y cargando modelos…")
     predictor.cargar()
+    metricas.registrar_arranque(predictor.modelos, APP_VERSION, COMMIT)
     log.info("modelos listos: %s",
              ", ".join(m.etiqueta for m in predictor.modelos.values()))
+    # Registro de predicciones (Hito 7b). Arranca DESPUÉS de los modelos: si no hay
+    # modelos no hay nada que registrar. Su base caída no impide arrancar.
+    app.state.registro = desde_entorno()
+    if app.state.registro:
+        app.state.registro.iniciar()
     yield
     log.info("apagando")
+    if app.state.registro:
+        app.state.registro.detener()   # vacía la cola: un rollout no pierde predicciones
 
 
 app = FastAPI(
@@ -51,6 +65,7 @@ app = FastAPI(
     version=APP_VERSION,
     lifespan=lifespan,
 )
+metricas.instrumentar(app)     # GET /metrics + medición de cada petición (Hito 7)
 
 
 # --------------------------------------------------------------------- esquemas
@@ -160,14 +175,29 @@ def contrato(segmento: str):
 
 
 @app.post("/predict", response_model=RespuestaPrediccion, tags=["predicción"])
-def predict(p: PeticionPrediccion):
+def predict(p: PeticionPrediccion, response: Response):
     if not predictor.listo:
         raise HTTPException(503, "modelos no cargados")
+    t0 = time.perf_counter()
     try:
         r = predictor.predecir(p.model_dump(), p.trabajo_mes_pasado)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
+    latencia_ms = (time.perf_counter() - t0) * 1000
 
+    metricas.registrar_prediccion(r.segmento, r.version, r.mediana)
+    # Un id por predicción, devuelto en un header: si alguien reporta una respuesta
+    # rara, con ese id se encuentra la fila exacta (features, versión, pod).
+    id_prediccion = uuid.uuid4()
+    response.headers["X-Prediccion-Id"] = str(id_prediccion)
+    if registro := getattr(app.state, "registro", None):
+        m = predictor.modelos[r.segmento]
+        registro.registrar(Registro(
+            id=id_prediccion, ts=datetime.now(UTC), segmento=r.segmento,
+            modelo=m.nombre, version=m.version, commit_api=COMMIT, pod=POD,
+            features={f: getattr(p, f) for f in m.features},   # lo que vio el modelo
+            inferior=r.inferior, mediana=r.mediana, superior=r.superior,
+            latencia_ms=latencia_ms))
     return RespuestaPrediccion(
         segmento=r.segmento, inferior=r.inferior, mediana=r.mediana, superior=r.superior,
         moneda=r.moneda, periodo=r.periodo, cobertura=r.cobertura,

@@ -28,3 +28,9 @@ pydantic==2.13.3
 # (databricks-sdk, opentelemetry, cryptography…): es el precio de desacoplar el modelo
 # de la imagen. Lo pagan en parte los ~150 MB que se quitaron en el Hito 2.
 mlflow-skinny==3.16.1
+
+# Hito 7: GET /metrics para Prometheus. Puro Python, sin dependencias.
+prometheus-client==0.26.0
+# Hito 7b: registro de predicciones en Postgres. `binary` trae libpq dentro de la rueda
+# (~4 MB): sin compilar nada ni instalar paquetes del sistema en la imagen.
+psycopg[binary]==3.3.8
