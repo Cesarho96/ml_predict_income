@@ -1,0 +1,580 @@
+{
+  "uid": "drift-ingreso",
+  "title": "Drift — ¿quién pide predicciones?",
+  "description": "PSI de las features de entrada contra la población de entrenamiento (Hito 7c). Lo calcula el DAG `monitor` (src/monitoreo/drift.py). Dashboard versionado en git: k8s/api/dashboards/drift.json.",
+  "tags": [
+    "ml-predict-income",
+    "hito-7",
+    "drift"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "version": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "segmento",
+        "label": "Segmento",
+        "type": "custom",
+        "query": "ocupados,no_ocupados",
+        "current": {
+          "text": "ocupados",
+          "value": "ocupados"
+        },
+        "options": [],
+        "hide": 0,
+        "multi": false
+      },
+      {
+        "name": "feature",
+        "label": "Feature",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "predicciones"
+        },
+        "query": "SELECT DISTINCT feature FROM drift WHERE segmento = '$segmento' ORDER BY 1",
+        "definition": "SELECT DISTINCT feature FROM drift WHERE segmento = '$segmento' ORDER BY 1",
+        "refresh": 1,
+        "current": {},
+        "options": [],
+        "hide": 0,
+        "multi": false,
+        "sort": 1
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "type": "row",
+      "id": 1,
+      "title": "Última medición — PSI de cada feature contra la población de entrenamiento",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "id": 2,
+      "title": "Horas desde la última medición",
+      "description": "El DAG `monitor` corre cada noche. Más de 26 h = no corrió.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "predicciones"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "predicciones"
+          },
+          "rawSql": "SELECT extract(epoch FROM now() - max(calculado)) / 3600 AS horas FROM drift",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 26
+              }
+            ]
+          },
+          "noValue": "sin mediciones",
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "id": 3,
+      "title": "Peticiones analizadas",
+      "description": "Cuántas predicciones entraron en la ventana de la última medición (ambos segmentos).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "predicciones"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "predicciones"
+          },
+          "rawSql": "SELECT sum(n) AS peticiones FROM (\n  SELECT segmento, max(n_actual) AS n FROM drift WHERE corrida = (SELECT corrida FROM drift ORDER BY calculado DESC LIMIT 1)\n  GROUP BY segmento) s",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "sin mediciones",
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "id": 4,
+      "title": "Features en 'actuar'",
+      "description": "PSI > 0.25 con muestra suficiente: la población que pide predicciones ya no se parece a la de entrenamiento en esa feature.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "predicciones"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "predicciones"
+          },
+          "rawSql": "SELECT count(*) FILTER (WHERE nivel = 'actuar') AS actuar FROM drift WHERE corrida = (SELECT corrida FROM drift ORDER BY calculado DESC LIMIT 1)",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "noValue": "sin mediciones",
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "type": "stat",
+      "id": 5,
+      "title": "Features en 'vigilar'",
+      "description": "PSI entre 0.10 y 0.25.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "predicciones"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "predicciones"
+          },
+          "rawSql": "SELECT count(*) FILTER (WHERE nivel = 'vigilar') AS vigilar FROM drift WHERE corrida = (SELECT corrida FROM drift ORDER BY calculado DESC LIMIT 1)",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "noValue": "sin mediciones",
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "type": "table",
+      "id": 6,
+      "title": "Todas las features (última medición)",
+      "description": "PSI = Σ (p_peticiones − p_población) · ln(p_peticiones / p_población). < 0.10 estable · 0.10–0.25 vigilar · > 0.25 actuar. 'insuficiente' = muy pocas peticiones para distinguir drift de azar (n < n_minimo).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "predicciones"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "predicciones"
+          },
+          "rawSql": "SELECT segmento, feature, tipo, round(psi::numeric, 3) AS psi, nivel, n_actual, n_minimo,\n       ventana_inicio, ventana_fin\nFROM drift WHERE corrida = (SELECT corrida FROM drift ORDER BY calculado DESC LIMIT 1)\nORDER BY psi DESC NULLS LAST",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "psi"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.1
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.25
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nivel"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "actuar": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "vigilar": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "estable": {
+                        "color": "green",
+                        "index": 2
+                      },
+                      "insuficiente": {
+                        "color": "text",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "type": "row",
+      "id": 7,
+      "title": "Evolución y detalle — elige segmento y feature arriba",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 8,
+      "title": "PSI en el tiempo — $segmento",
+      "description": "Escala logarítmica: un PSI de 0.01 y uno de 10 caben en la misma gráfica. Líneas: 0.10 (vigilar) y 0.25 (actuar).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "predicciones"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "predicciones"
+          },
+          "rawSql": "SELECT calculado AS \"time\", feature AS metric, greatest(psi, 0.001) AS value\nFROM drift\nWHERE segmento = '$segmento' AND psi IS NOT NULL AND $__timeFilter(calculado)\nORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0.001,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "showPoints": "always",
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "log",
+              "log": 10
+            },
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "type": "barchart",
+      "id": 9,
+      "title": "$feature ($segmento): población vs. peticiones",
+      "description": "De dónde sale el PSI: proporción de cada bin en la población de entrenamiento (ponderada por el factor de expansión) contra la de las peticiones de la última medición.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "predicciones"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "predicciones"
+          },
+          "rawSql": "SELECT d.v->>'bin' AS bin,\n       (d.v->>'p_ref')::float AS \"población (referencia)\",\n       (d.v->>'p_actual')::float AS \"peticiones\"\nFROM drift, jsonb_array_elements(detalle) WITH ORDINALITY AS d(v, i)\nWHERE corrida = (SELECT corrida FROM drift ORDER BY calculado DESC LIMIT 1) AND segmento = '$segmento' AND feature = '$feature'\nORDER BY d.i",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "bin",
+        "orientation": "auto",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "showValue": "never",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "xTickLabelRotation": -45,
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    }
+  ]
+}

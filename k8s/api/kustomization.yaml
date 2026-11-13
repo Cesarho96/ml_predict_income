@@ -32,6 +32,7 @@ configMapGenerator:
   - name: dashboard-api
     files:
       - dashboards/api.json
+      - dashboards/drift.json     # Hito 7c (lee Postgres, no Prometheus)
     options:
       disableNameSuffixHash: true
       labels:

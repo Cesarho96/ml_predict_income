@@ -46,6 +46,9 @@ x-airflow: &airflow
     ML_VOLUMEN_DATOS: ml-predict-income-datos
     ML_VOLUMEN_CRUDOS: ml-predict-income-crudos
     ML_MLFLOW_URI: http://mlflow:5000
+    # DAG `monitor` (Hito 7c): el drift lee predicciones y escribe resultados con el rol
+    # `monitor`. El DAG la pasa como `private_environment`: no aparece en la UI.
+    ML_MONITOR_DSN: postgresql://monitor:${PREDICCIONES_MONITOR_PASSWORD:-}@predicciones-db:5432/predicciones
   volumes:
     # Los DAGs se montan en SÓLO LECTURA: Airflow los lee, nunca los escribe.
     - ./airflow/dags:/opt/airflow/dags:ro
@@ -116,6 +119,7 @@ services:
       # Las lee el script de esquema al crear los roles (docker/predicciones/initdb).
       PREDICCIONES_API_PASSWORD: ${PREDICCIONES_API_PASSWORD}
       PREDICCIONES_LECTOR_PASSWORD: ${PREDICCIONES_LECTOR_PASSWORD}
+      PREDICCIONES_MONITOR_PASSWORD: ${PREDICCIONES_MONITOR_PASSWORD}   # migración 02
     # 5433 y no 5432: no chocar con un Postgres que ya tengas instalado en Windows.
     ports: ["127.0.0.1:5433:5432"]
     volumes:

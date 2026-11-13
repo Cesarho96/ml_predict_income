@@ -16,6 +16,7 @@ el mismo que corre CI. Cero dependencias: sólo la librería estándar.
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import os
 import secrets
@@ -155,6 +156,7 @@ def _asegurar_env() -> dict[str, str]:
         "PREDICCIONES_DB_PASSWORD": lambda: secrets.token_urlsafe(24),
         "PREDICCIONES_API_PASSWORD": lambda: secrets.token_urlsafe(24),
         "PREDICCIONES_LECTOR_PASSWORD": lambda: secrets.token_urlsafe(24),
+        "PREDICCIONES_MONITOR_PASSWORD": lambda: secrets.token_urlsafe(24),   # Hito 7c
     }
     nuevos = {k: gen() for k, gen in generadores.items() if not actuales.get(k)}
     if nuevos:
@@ -269,7 +271,32 @@ def predicciones():
           "@127.0.0.1:5433/predicciones (la contraseña está en .env)")
 
 
-@tarea("crea o actualiza el Secret de Kubernetes con la conexión de la API (lee .env)")
+@tarea("aplica las migraciones del registro de predicciones a una base que ya existe")
+def migrar():
+    """Corre las migraciones posteriores a 01 (01 sólo corre al crear la base).
+
+    `up -d` primero: si .env trae una contraseña nueva (la de `monitor`), compose recrea
+    el contenedor con ella. Los datos viven en el volumen y no se tocan. Las migraciones
+    son idempotentes: correr esto dos veces no rompe nada.
+    """
+    _asegurar_env()
+    corre(*COMPOSE, "up", "-d", "--wait", "predicciones-db")
+    for sql in sorted((RAIZ / "docker" / "predicciones" / "initdb").glob("0*.sql"))[1:]:
+        print(f"→ {sql.name}")
+        corre(*COMPOSE, "exec", "-T", "predicciones-db", "psql", "-v", "ON_ERROR_STOP=1",
+              "-U", "dueno", "-d", "predicciones", "-f", f"/docker-entrypoint-initdb.d/{sql.name}")
+
+
+@tarea("calcula el drift de las últimas horas desde tu máquina: drift [horas]  (1 por omisión)")
+def drift(horas: str = "1"):
+    """Lo mismo que el DAG `monitor`, sin Airflow: para iterar rápido."""
+    env = _asegurar_env()
+    dsn = (f"postgresql://monitor:{env['PREDICCIONES_MONITOR_PASSWORD']}"
+           "@127.0.0.1:5433/predicciones")
+    corre(PY, "-m", "src.monitoreo.drift", "--horas", horas, env={"MONITOR_DSN": dsn})
+
+
+@tarea("crea o actualiza los Secrets de Kubernetes de la API y de Grafana (lee .env)")
 def secreto_k8s():
     """El Secret `api-predicciones` en el namespace de la API, sin imprimir la contraseña.
 
@@ -281,6 +308,10 @@ def secreto_k8s():
     El pod llega a tu máquina, donde compose publica Postgres en el 5433.
     """
     env = _asegurar_env()
+    # Los namespaces primero (los manifiestos reales, con sus etiquetas): en un cluster
+    # recién creado aún no existen, y un Secret no se puede crear en un namespace ausente.
+    for manifiesto in ("k8s/api/namespace.yaml", "k8s/cluster/monitoreo/namespace.yaml"):
+        corre("kubectl", "apply", "-f", manifiesto)
     dsn = (f"postgresql://api_escritura:{env['PREDICCIONES_API_PASSWORD']}"
            "@predicciones-db:5433/predicciones")
     yaml_secreto = subprocess.run(
@@ -289,6 +320,102 @@ def secreto_k8s():
          "--dry-run=client", "-o", "yaml"],
         capture_output=True, text=True, check=True).stdout
     subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml_secreto, text=True, check=True)
+
+    # Grafana lee el registro como `lector` (Hito 7c). La contraseña llega como variable
+    # de entorno del pod de Grafana y la usa la definición del datasource (values.yaml).
+    yaml_grafana = subprocess.run(
+        ["kubectl", "create", "secret", "generic", "grafana-predicciones", "-n", "monitoreo",
+         f"--from-literal=PREDICCIONES_LECTOR_PASSWORD={env['PREDICCIONES_LECTOR_PASSWORD']}",
+         "--dry-run=client", "-o", "yaml"],
+        capture_output=True, text=True, check=True).stdout
+    subprocess.run(["kubectl", "apply", "-f", "-"], input=yaml_grafana, text=True, check=True)
+
+
+ENVOY = "kindccm-gw"          # así nombra cloud-provider-kind al Envoy de cada Gateway
+COMPOSE_CPK = (*COMPOSE, "-f", "k8s/cloud-provider-kind.compose.yaml")
+ESPERA_ENVOY, ESPERA_API = 90, 30     # segundos
+
+
+def _docker(*args: str) -> str:
+    """Salida de una CONSULTA a docker ('' si falla). No se imprime: no cambia nada."""
+    r = subprocess.run(["docker", *args], cwd=RAIZ, capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def _envoy() -> tuple[str, str] | None:
+    """(contenedor, puerto de tu máquina que llega a su puerto 80), o None si no hay."""
+    for nombre in _docker("ps", "--filter", f"name={ENVOY}", "--format", "{{.Names}}").split():
+        # `docker port` responde p. ej. "0.0.0.0:50593" (a veces otra línea para IPv6).
+        for linea in _docker("port", nombre, "80/tcp").splitlines():
+            puerto = linea.rsplit(":", 1)[-1].strip()
+            if puerto.isdigit():
+                return nombre, puerto
+    return None
+
+
+def _estado_gateway(puerto: str) -> str:
+    """Qué capa contesta en la puerta de entrada.
+
+    'ok'         la API contestó /health con 200
+    'http <n>'   Envoy contestó, pero con error: la causa está DETRÁS (la ruta, los pods)
+    'mudo'       nadie contestó HTTP: Envoy no tiene configuración, o no existe
+    """
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{puerto}/health", timeout=3) as r:
+            return "ok" if r.status == 200 else f"http {r.status}"
+    except urllib.error.HTTPError as e:       # primero: es subclase de URLError
+        return f"http {e.code}"
+    except (OSError, http.client.HTTPException):
+        return "mudo"
+
+
+def _sondear_gateway(listo, segundos: int) -> tuple[tuple[str, str] | None, str]:
+    """Sondea hasta que `listo(estado)` o se acabe el tiempo. Devuelve el último sondeo."""
+    limite = time.time() + segundos
+    while True:
+        e = _envoy()
+        estado = _estado_gateway(e[1]) if e else "mudo"
+        if listo(estado) or time.time() >= limite:
+            return e, estado
+        time.sleep(2)
+
+
+@tarea("dice el puerto de entrada del cluster; repara el Gateway si quedó mudo")
+def gateway():
+    """Revisa la puerta de entrada capa por capa, la repara si hace falta y dice su URL.
+
+    Al reiniciar Docker Desktop, el Envoy del Gateway arranca SIN configuración (la tenía
+    en memoria) y con una dirección vieja de su plano de control (cloud-provider-kind):
+    acepta la conexión y la cierra sin responder (ERR_EMPTY_RESPONSE). El arreglo del
+    runbook, automatizado: borrar el Envoy y reiniciar el controlador, que al arrancar
+    crea uno nuevo — con OTRO puerto.
+
+    Sólo se repara si Envoy está MUDO. Un 404 o un 503 son respuestas: Envoy funciona y
+    la causa está detrás (la ruta o los pods); recrearlo no arreglaría nada.
+    """
+    e, estado = _sondear_gateway(lambda s: True, 0)
+    if estado == "mudo":
+        print("el Gateway no responde: " + (f"el Envoy {e[0]} está mudo, se recrea." if e else
+              "no hay Envoy, se arranca cloud-provider-kind."))
+        corre(*COMPOSE_CPK, "up", "-d")
+        if e:
+            corre("docker", "rm", "-f", e[0])
+            corre(*COMPOSE_CPK, "restart")
+        print(f"esperando al Envoy nuevo (hasta {ESPERA_ENVOY} s)…", flush=True)
+        e, estado = _sondear_gateway(lambda s: s != "mudo", ESPERA_ENVOY)
+    if estado not in ("ok", "mudo"):          # Envoy contesta: un momento a la ruta y los pods
+        e, estado = _sondear_gateway(lambda s: s == "ok", ESPERA_API)
+
+    if estado == "mudo":
+        sys.exit("el Gateway sigue sin responder. ¿Existe el cluster? `kind get clusters`. "
+                 "¿Y el Gateway? `kubectl get gateway -n entrada`.\nÚltimo recurso: "
+                 "kubectl delete -k k8s/cluster/gateway  y  kubectl apply -k k8s/cluster/gateway")
+    url = f"http://127.0.0.1:{e[1]}"
+    if estado != "ok":
+        print(f"Envoy responde en {url}, pero la API no ({estado}): la causa está detrás.")
+        corre("kubectl", "get", "pods", "-n", "ml-predict-income", check=False)
+        sys.exit(1)
+    print(f"Gateway OK → {url}/docs     puerto: {e[1]}")
 
 
 @tarea("apaga todos los contenedores; los volúmenes (MLflow, Airflow) se conservan")

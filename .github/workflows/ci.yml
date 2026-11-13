@@ -75,19 +75,27 @@ jobs:
       - name: Lint (ruff)
         run: python tasks.py lint
 
-      # El MISMO archivo que ejecuta compose al crear la base: si el esquema o los
-      # permisos se rompen, falla aquí y no en tu máquina.
-      - name: Esquema del registro de predicciones
+      # Los MISMOS archivos que ejecuta compose al crear la base, en el mismo orden: si
+      # el esquema, una migración o los permisos se rompen, falla aquí y no en tu máquina.
+      # La 02 se aplica DOS veces: prueba que es idempotente (`tasks.py migrar` la corre
+      # sobre bases que ya la tienen).
+      - name: Esquema y migraciones del registro de predicciones
         env:
           PGPASSWORD: dueno-ci
           PREDICCIONES_API_PASSWORD: api-ci
           PREDICCIONES_LECTOR_PASSWORD: lector-ci
-        run: psql -v ON_ERROR_STOP=1 -h localhost -U dueno -d predicciones -f docker/predicciones/initdb/01-esquema.sql
+          PREDICCIONES_MONITOR_PASSWORD: monitor-ci
+        run: |
+          for sql in docker/predicciones/initdb/0*.sql docker/predicciones/initdb/02-drift.sql; do
+            echo "→ $sql"
+            psql -q -v ON_ERROR_STOP=1 -h localhost -U dueno -d predicciones -f "$sql"
+          done
 
       - name: Pruebas (pytest — modelos sintéticos, sin datos ni MLflow)
         env:
           PREDICCIONES_DSN_PRUEBA: postgresql://api_escritura:api-ci@localhost:5432/predicciones
           PREDICCIONES_DSN_LECTOR_PRUEBA: postgresql://lector:lector-ci@localhost:5432/predicciones
+          PREDICCIONES_DSN_MONITOR_PRUEBA: postgresql://monitor:monitor-ci@localhost:5432/predicciones
         run: python tasks.py test
 
   # ------------------------------------------------------------------ 2. DAGs
@@ -185,7 +193,7 @@ jobs:
           done
           valida k8s/pruebas/*.yaml k8s/cluster/monitoreo/namespace.yaml
           # El dashboard es JSON dentro de un ConfigMap: kubeconform no lo abre.
-          python3 -m json.tool k8s/api/dashboards/api.json > /dev/null
+          for d in k8s/api/dashboards/*.json; do python3 -m json.tool "$d" > /dev/null; done
 
       # Las alertas son código: tienen pruebas. promtool alimenta series sintéticas y
       # comprueba que cada alerta dispare cuando debe y NO antes ni por debajo del umbral.
