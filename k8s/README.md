@@ -128,6 +128,7 @@ El DAG `monitor` de Airflow hace lo mismo cada noche (ventana de 24 h) o a mano
 | `predicciones-db` arranca pero faltan los roles `api_escritura`/`lector` | el esquema sólo corre con el volumen VACÍO; si el primer arranque falló a la mitad, nunca vuelve a correr. Con la base vacía: `docker compose rm -sf predicciones-db`, `docker volume rm ml-predict-income_predicciones-db`, `python tasks.py predicciones` |
 | tras reiniciar Docker Desktop, el puerto del Gateway da `ERR_EMPTY_RESPONSE` | el Envoy (`kindccm-…`) perdió su configuración y no encuentra a cloud-provider-kind: `docker logs kindccm-…` → `StreamAggregatedResources … Connection refused`. Arreglo: **`python tasks.py gateway`** (borra el Envoy, reinicia el controlador, espera al nuevo y dice su puerto, que CAMBIA). A mano: `docker rm -f kindccm-…` y `docker compose -f k8s/cloud-provider-kind.compose.yaml restart` |
 | el datasource `Predicciones` de Grafana falla al conectar | falta el Secret `grafana-predicciones` (`python tasks.py secreto-k8s`) o Grafana no se reinició después: `kubectl rollout restart deploy/monitoreo-grafana -n monitoreo` |
+| `helm upgrade` → `no cached repo found … prometheus-community-index.yaml` | Helm guarda el catálogo del repo en `%TEMP%\helm`, y Windows limpia esa carpeta: `helm repo update` lo vuelve a bajar |
 | Prometheus no lee el ServiceMonitor | el chart sólo lee los que llevan `release: monitoreo`; `values.yaml` lo desactiva (`*SelectorNilUsesHelmValues: false`) |
 
 ## Apagar
