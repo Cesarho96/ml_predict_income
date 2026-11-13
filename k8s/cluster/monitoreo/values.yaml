@@ -40,6 +40,26 @@ prometheus:
       limits: {memory: 1Gi}
 
 grafana:
+  # Hito 7c: Grafana lee el registro de predicciones (Postgres en compose) como `lector`,
+  # el rol que sólo puede leer. La contraseña llega del Secret `grafana-predicciones`
+  # (lo crea `tasks.py secreto-k8s`, no está en git) como variable de entorno, y la
+  # definición del datasource la toma con $PREDICCIONES_LECTOR_PASSWORD.
+  # host.docker.internal:5433 = tu máquina, donde compose publica Postgres.
+  envFromSecrets:
+    - name: grafana-predicciones
+      optional: true     # sin el Secret, Grafana arranca igual (sin ese datasource)
+  additionalDataSources:
+    - name: Predicciones
+      uid: predicciones
+      type: grafana-postgresql-datasource
+      url: host.docker.internal:5433
+      user: lector
+      jsonData:
+        database: predicciones
+        sslmode: disable
+        postgresVersion: 1600
+      secureJsonData:
+        password: $PREDICCIONES_LECTOR_PASSWORD
   # Los dashboards viven en git (ConfigMaps que el sidecar carga), no en un disco: si el
   # pod de Grafana se recrea, vuelven solos. Lo que se edite a mano en la UI se pierde.
   persistence: {enabled: false}

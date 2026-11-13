@@ -25,7 +25,7 @@ def dagbag():
 
 def test_todos_los_dags_cargan_sin_errores(dagbag):
     assert dagbag.import_errors == {}, dagbag.import_errors
-    assert {"hola", "reentrenar"} <= set(dagbag.dag_ids)
+    assert {"hola", "reentrenar", "monitor"} <= set(dagbag.dag_ids)
 
 
 def test_reentrenar_tiene_el_orden_correcto(dagbag):
@@ -58,3 +58,14 @@ def test_los_dags_no_importan_computo(archivo):
     importados |= {nodo.module.split(".")[0] for nodo in ast.walk(arbol)
                    if isinstance(nodo, ast.ImportFrom) and nodo.module}
     assert not importados & PROHIBIDOS, f"{archivo.name} importa {importados & PROHIBIDOS}"
+
+
+def test_monitor_no_expone_la_contrasena_y_no_escribe_datos(dagbag):
+    """La conexión a la base viaja en private_environment (no se muestra en la UI) y el
+    dataset se monta en sólo lectura."""
+    (tarea,) = dagbag.dags["monitor"].tasks
+    assert "MONITOR_DSN" not in tarea.environment
+    # El operador lo guarda en un atributo privado a propósito: no es un template field.
+    assert "MONITOR_DSN" in tarea._private_environment
+    assert all(m["ReadOnly"] for m in tarea.mounts)
+    assert tarea.environment["ORQUESTADOR_RUN_ID"] == "{{ run_id }}"

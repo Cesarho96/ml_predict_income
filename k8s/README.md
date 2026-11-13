@@ -35,6 +35,7 @@ tu máquina ──▶ localhost:<puerto> ──▶ Envoy (Gateway `entrada`) ─
 ```powershell
 docker compose up -d mlflow                                   # el cluster depende de él
 python tasks.py predicciones                                  # registro de predicciones (Hito 7b)
+python tasks.py migrar                                        # migraciones posteriores (7c: drift)
 kind create cluster --config k8s/kind.yaml
 
 # La imagen que dice k8s/api/kustomization.yaml (newTag = commit del código).
@@ -48,12 +49,12 @@ kubectl apply -k k8s/cluster/metrics-server
 kubectl apply -k k8s/cluster/gateway
 
 # Monitoreo, antes de api/: instala las CRDs ServiceMonitor y PrometheusRule
+# Antes de Helm: Grafana toma del Secret la contraseña de su datasource de predicciones.
+python tasks.py secreto-k8s                                   # namespaces + Secrets (no van en git)
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-kubectl apply -f k8s/cluster/monitoreo/namespace.yaml
 helm upgrade --install monitoreo prometheus-community/kube-prometheus-stack `
   --version 92.14.1 -n monitoreo -f k8s/cluster/monitoreo/values.yaml --wait --timeout 10m
 
-python tasks.py secreto-k8s                                   # Secret con la conexión (no va en git)
 kubectl apply -k k8s/api
 
 kubectl get pods -n ml-predict-income -w                      # 2 pods 1/1
@@ -92,6 +93,24 @@ $p = kubectl get secret -n monitoreo monitoreo-grafana -o jsonpath="{.data.admin
 - Grafana → dashboard **API de ingreso — servicio y modelo** (`api/dashboards/api.json`).
   Se edita en git, no en la UI: lo hecho en la UI se pierde al recrear el pod.
 - Alertas: `api/alertas.yaml`, probadas con promtool (`tests/alertas/`, en CI).
+- Grafana → dashboard **Drift — ¿quién pide predicciones?** (`api/dashboards/drift.json`):
+  lee la tabla `drift` del registro (datasource `Predicciones`, rol `lector`).
+
+## Drift (Hito 7c)
+
+```powershell
+python tasks.py gateway                                               # revisa la entrada y dice el puerto <P>
+python scripts/trafico_sintetico.py --perfil poblacion --puerto <P>   # control
+python tasks.py drift 1                                               # PSI de la última hora: todo "estable"
+python scripts/trafico_sintetico.py --perfil sesgado --puerto <P>     # CDMX + posgrado
+python tasks.py drift 1                                               # cve_entidad y anios_escolaridad: "actuar"
+```
+
+La segunda medición mezcla los dos tráficos (mitad población, mitad sesgado), como pasa
+en la vida real: el PSI baja de ~8–10 a ~1–2 y sigue muy por encima de 0.25.
+
+El DAG `monitor` de Airflow hace lo mismo cada noche (ventana de 24 h) o a mano
+("Trigger DAG w/ config", `ventana_horas`). Los resultados quedan en la tabla `drift`.
 
 ## Trampas que ya aparecieron
 
@@ -107,7 +126,9 @@ $p = kubectl get secret -n monitoreo monitoreo-grafana -o jsonpath="{.data.admin
 | `CreateContainerConfigError` en los pods de la API | falta el Secret `api-predicciones`: `python tasks.py secreto-k8s` |
 | la API no guarda predicciones (`prediction_log_dropped_total{reason="error_base"}` sube) | `predicciones-db` apagada, o el DSN apunta a :5432 (el ExternalName no traduce puertos: es :5433) |
 | `predicciones-db` arranca pero faltan los roles `api_escritura`/`lector` | el esquema sólo corre con el volumen VACÍO; si el primer arranque falló a la mitad, nunca vuelve a correr. Con la base vacía: `docker compose rm -sf predicciones-db`, `docker volume rm ml-predict-income_predicciones-db`, `python tasks.py predicciones` |
-| tras reiniciar Docker Desktop, el puerto del Gateway da `ERR_EMPTY_RESPONSE` | el Envoy (`kindccm-…`) perdió su configuración y no encuentra a cloud-provider-kind: `docker logs kindccm-…` → `StreamAggregatedResources … Connection refused`. Arreglo: `docker compose -f k8s/cloud-provider-kind.compose.yaml restart` y `docker rm -f kindccm-…`; el controlador crea otro (con OTRO puerto: `docker ps --filter name=kindccm`) |
+| tras reiniciar Docker Desktop, el puerto del Gateway da `ERR_EMPTY_RESPONSE` | el Envoy (`kindccm-…`) perdió su configuración y no encuentra a cloud-provider-kind: `docker logs kindccm-…` → `StreamAggregatedResources … Connection refused`. Arreglo: **`python tasks.py gateway`** (borra el Envoy, reinicia el controlador, espera al nuevo y dice su puerto, que CAMBIA). A mano: `docker rm -f kindccm-…` y `docker compose -f k8s/cloud-provider-kind.compose.yaml restart` |
+| el datasource `Predicciones` de Grafana falla al conectar | falta el Secret `grafana-predicciones` (`python tasks.py secreto-k8s`) o Grafana no se reinició después: `kubectl rollout restart deploy/monitoreo-grafana -n monitoreo` |
+| `helm upgrade` → `no cached repo found … prometheus-community-index.yaml` | Helm guarda el catálogo del repo en `%TEMP%\helm`, y Windows limpia esa carpeta: `helm repo update` lo vuelve a bajar |
 | Prometheus no lee el ServiceMonitor | el chart sólo lee los que llevan `release: monitoreo`; `values.yaml` lo desactiva (`*SelectorNilUsesHelmValues: false`) |
 
 ## Apagar
