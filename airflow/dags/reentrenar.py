@@ -5,9 +5,15 @@
       → dataset; Hito 5b)                    versión)      test; marca @challenger;
                                                            NUNCA toca @champion)
 
-Se dispara a mano, con la edición de la ENIGH como parámetro ("Trigger DAG w/ config"):
-cuando INEGI publique la 2026, se copian los CSV a data/raw, `tasks.py preparar`, y se
-corre con edicion=2026.
+Dos formas de arrancar:
+  · A mano, con la edición de la ENIGH como parámetro ("Trigger DAG w/ config"): cuando
+    INEGI publique la 2026, se copian los CSV a data/raw, `tasks.py preparar`, y se corre
+    con edicion=2026. Es el disparo que SÍ puede cambiar el modelo: datos nuevos.
+  · Sola, cuando el DAG `monitor` publica el evento `drift_sostenido` (Hito 8). Con la
+    misma ENIGH el modelo nuevo saldrá equivalente al champion y no se promoverá: el
+    drift dice que quienes piden predicciones no se parecen a la población, y eso no lo
+    arregla reentrenar con los mismos datos. Correr igual deja constancia, y si algo
+    más cambió (código, edición), es aquí donde se nota.
 
 La regla de diseño de este archivo: **el DAG orquesta, no calcula.** Ninguna tarea
 importa pandas ni scikit-learn aquí. Cada tarea arranca un contenedor con la MISMA
@@ -30,7 +36,7 @@ from datetime import timedelta
 
 import pendulum
 from airflow.providers.docker.operators.docker import DockerOperator
-from airflow.sdk import Param, dag
+from airflow.sdk import Asset, Param, dag
 from docker.types import Mount
 
 # Configuración desde el entorno de los contenedores de Airflow (docker-compose.yml), no
@@ -41,6 +47,10 @@ RED = os.environ.get("ML_RED_DOCKER", "ml-predict-income_default")
 VOLUMEN_DATOS = os.environ.get("ML_VOLUMEN_DATOS", "ml-predict-income-datos")
 VOLUMEN_CRUDOS = os.environ.get("ML_VOLUMEN_CRUDOS", "ml-predict-income-crudos")
 MLFLOW = os.environ.get("ML_MLFLOW_URI", "http://mlflow:5000")
+
+# Lo publica el DAG `monitor` cuando empieza un episodio de drift sostenido. Mismo nombre
+# en los dos archivos (lo verifica airflow/tests/test_dags.py): ése es todo su acoplamiento.
+DRIFT_SOSTENIDO = Asset("drift_sostenido")
 
 # Lo que reciben las tareas que hablan con MLflow. `{{ run_id }}` lo rellena Airflow en
 # cada corrida: es el linaje que une "esta corrida del DAG" con "estas versiones del
@@ -88,7 +98,8 @@ def en_contenedor(task_id: str, comando: str, escribe_datos: bool = False,
 @dag(
     dag_id="reentrenar",
     description="Valida datos, entrena, compara con el champion y registra un challenger",
-    schedule=None,       # la ENIGH es bienal: se dispara a mano cuando hay datos nuevos
+    # Arranca sola con el evento de `monitor` (Hito 8). A mano funciona igual que antes.
+    schedule=[DRIFT_SOSTENIDO],
     start_date=pendulum.datetime(2026, 9, 1, tz="America/Mexico_City"),
     catchup=False,
     max_active_runs=1,   # dos reentrenamientos a la vez registrarían versiones cruzadas

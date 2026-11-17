@@ -116,6 +116,16 @@ def test_calcular_cubre_cada_feature_de_cada_segmento_aunque_no_haya_trafico():
     assert sin.n_actual == 0 and np.isnan(sin.psi) and sin.nivel == "insuficiente"
 
 
+# ------------------------------------------------------------------ la ventana
+def test_la_ventana_termina_donde_dice_la_corrida():
+    """Hito 8: una corrida re-ejecutada días después mide SU día, no 'las últimas 24 h'."""
+    assert drift.fin_de_ventana("2026-11-13T05:55:00+00:00") == datetime(
+        2026, 11, 13, 5, 55, tzinfo=UTC)
+    assert drift.fin_de_ventana("2026-11-13 05:55:00") == datetime(    # sin zona = UTC
+        2026, 11, 13, 5, 55, tzinfo=UTC)
+    assert abs(drift.fin_de_ventana("") - datetime.now(UTC)) < timedelta(seconds=5)
+
+
 # ------------------------------------------------------------------ Postgres real
 DSN_API = os.getenv("PREDICCIONES_DSN_PRUEBA")
 DSN_MONITOR = os.getenv("PREDICCIONES_DSN_MONITOR_PRUEBA")
