@@ -111,6 +111,8 @@ en la vida real: el PSI baja de ~8–10 a ~1–2 y sigue muy por encima de 0.25.
 
 El DAG `monitor` de Airflow hace lo mismo cada noche (ventana de 24 h) o a mano
 ("Trigger DAG w/ config", `ventana_horas`). Los resultados quedan en la tabla `drift`.
+Si el drift es sostenido (`mediciones_para_reentrenar` mediciones seguidas; 3 por
+omisión) publica el evento `drift_sostenido` y el DAG `reentrenar` arranca solo (Hito 8).
 
 ## Trampas que ya aparecieron
 

@@ -1,7 +1,9 @@
 """Drift de entrada con PSI (Hito 7c): ¿se parecen las personas que piden predicciones a
 la población con la que se entrenó el modelo?
 
-    python -m src.monitoreo.drift --horas 24        # lo que corre el DAG `monitor`
+    python -m src.monitoreo.drift --horas 24                 # las últimas 24 h
+    python -m src.monitoreo.drift --horas 24 --hasta 2026-11-13T05:55:00+00:00
+                                                     # lo que corre el DAG `monitor`
 
 Sin ground truth en producción (nadie nos dice su ingreso real), esto es lo único medible
 sobre la calidad del modelo en uso: si la entrada se aleja de lo que el modelo conoce,
@@ -217,7 +219,8 @@ SQL_GUARDAR = """
                        tipo, psi, n_actual, n_minimo, nivel, detalle)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (corrida, segmento, feature) DO UPDATE SET
-        calculado = EXCLUDED.calculado, psi = EXCLUDED.psi, n_actual = EXCLUDED.n_actual,
+        calculado = EXCLUDED.calculado, ventana_inicio = EXCLUDED.ventana_inicio,
+        ventana_fin = EXCLUDED.ventana_fin, psi = EXCLUDED.psi, n_actual = EXCLUDED.n_actual,
         n_minimo = EXCLUDED.n_minimo, nivel = EXCLUDED.nivel, detalle = EXCLUDED.detalle
 """
 
@@ -242,10 +245,22 @@ def guardar(con, corrida: str, desde: datetime, hasta: datetime,
              Jsonb(r.detalle)) for r in resultados])
 
 
+def fin_de_ventana(texto: str = "") -> datetime:
+    """Dónde termina la ventana. Vacío = ahora (uso a mano). El DAG pasa la hora
+    PROGRAMADA de su corrida: así una corrida atrasada o re-ejecutada mide SU día y no
+    "las últimas 24 h desde que alguien la volvió a correr". Sin zona horaria = UTC."""
+    if not texto.strip():
+        return datetime.now(UTC)
+    t = datetime.fromisoformat(texto.strip())
+    return t if t.tzinfo else t.replace(tzinfo=UTC)
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="PSI de las predicciones recientes contra la "
                                              "población de entrenamiento")
     ap.add_argument("--horas", type=float, default=24, help="ventana hacia atrás (h)")
+    ap.add_argument("--hasta", default="", help="fin de la ventana, ISO 8601 (por omisión, "
+                                                "ahora); el DAG pasa la hora de su corrida")
     ap.add_argument("--maximo", type=int, default=100_000, help="muestra máxima de filas")
     a = ap.parse_args(argv)
 
@@ -253,7 +268,7 @@ def main(argv: list[str] | None = None) -> None:
 
     dsn = os.environ["MONITOR_DSN"]           # sin default: sin base no hay nada que medir
     corrida = os.getenv("ORQUESTADOR_RUN_ID") or f"manual-{uuid.uuid4().hex[:8]}"
-    hasta = datetime.now(UTC)
+    hasta = fin_de_ventana(a.hasta)
     desde = hasta - timedelta(hours=a.horas)
 
     ref = referencia()

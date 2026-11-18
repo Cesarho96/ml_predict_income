@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from airflow.models.dagbag import DagBag
+from airflow.sdk import Asset
 
 DAGS = Path(__file__).resolve().parent.parent / "dags"
 # El DAG orquesta, no calcula (ver reentrenar.py). Importar esto en un DAG es la señal de
@@ -33,7 +34,7 @@ def test_reentrenar_tiene_el_orden_correcto(dagbag):
     assert dag.get_task("construir_dataset").downstream_task_ids == {"validar_datos"}
     assert dag.get_task("validar_datos").downstream_task_ids == {"entrenar"}
     assert dag.get_task("entrenar").downstream_task_ids == {"comparar_con_champion"}
-    assert dag.max_active_runs == 1 and dag.schedule is None
+    assert dag.max_active_runs == 1 and dag.schedule == [Asset("drift_sostenido")]
 
 
 def test_solo_construir_escribe_y_todas_llevan_edicion_y_linaje(dagbag):
@@ -63,9 +64,32 @@ def test_los_dags_no_importan_computo(archivo):
 def test_monitor_no_expone_la_contrasena_y_no_escribe_datos(dagbag):
     """La conexión a la base viaja en private_environment (no se muestra en la UI) y el
     dataset se monta en sólo lectura."""
-    (tarea,) = dagbag.dags["monitor"].tasks
-    assert "MONITOR_DSN" not in tarea.environment
-    # El operador lo guarda en un atributo privado a propósito: no es un template field.
-    assert "MONITOR_DSN" in tarea._private_environment
-    assert all(m["ReadOnly"] for m in tarea.mounts)
-    assert tarea.environment["ORQUESTADOR_RUN_ID"] == "{{ run_id }}"
+    for tarea in dagbag.dags["monitor"].tasks:
+        assert "MONITOR_DSN" not in tarea.environment
+        # El operador lo guarda en un atributo privado a propósito: no es un template field.
+        assert "MONITOR_DSN" in tarea._private_environment
+        assert all(m["ReadOnly"] for m in tarea.mounts)
+        assert tarea.environment["ORQUESTADOR_RUN_ID"] == "{{ run_id }}"
+
+
+def test_monitor_mide_decide_y_publica_lo_que_escucha_reentrenar(dagbag):
+    """El ciclo del Hito 8, como cableado: medir → decidir → evento → reentrenar."""
+    monitor, reentrenar = dagbag.dags["monitor"], dagbag.dags["reentrenar"]
+    assert monitor.get_task("calcular_drift").downstream_task_ids == {"evaluar_persistencia"}
+    decide = monitor.get_task("evaluar_persistencia")
+    assert decide.outlets == reentrenar.schedule == [Asset("drift_sostenido")]
+    # "No disparar" tiene que ser SKIP, no FALLO: una tarea saltada no emite su evento,
+    # y una fallida pintaría de rojo un DAG que hizo exactamente lo que debía.
+    assert 99 in decide.skip_on_exit_code
+
+
+def test_cada_corrida_mide_hasta_su_hora_programada(dagbag):
+    """La ventana termina en `run_after` (la hora programada), no en "ahora"."""
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    t = dagbag.dags["monitor"].get_task("calcular_drift")
+    ctx = {"dag_run": SimpleNamespace(run_after=datetime(2026, 11, 13, 5, 55, tzinfo=UTC)),
+           "params": {"ventana_horas": 24}}
+    assert t.render_template(t.command, ctx) == (
+        "python -m src.monitoreo.drift --horas 24 --hasta 2026-11-13T05:55:00+00:00")
