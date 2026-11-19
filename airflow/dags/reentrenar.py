@@ -1,9 +1,19 @@
-"""DAG `reentrenar`: de la ENIGH cruda a un @challenger en el registry.
+"""DAG `reentrenar`: de la ENIGH cruda a un modelo nuevo, y el gate que decide si sirve.
 
     construir_dataset ──▶ validar_datos ──▶ entrenar ──▶ comparar_con_champion
      (microdato crudo      (pandera)        (registra     (evalúa ambos sobre el mismo
-      → dataset; Hito 5b)                    versión)      test; marca @challenger;
-                                                           NUNCA toca @champion)
+      → dataset; Hito 5b)                    versión)      test; marca @challenger)
+                                                                     │
+                                                                     ▼
+                                                           decidir_promocion
+                                                           (el gate, Hito 8: ¿pasa a
+                                                            @champion? src/promocion.py)
+
+`comparar` mide y escribe la evidencia en la versión; `decidir_promocion` la lee y
+promueve sólo si se cumple todo (veredicto "mejor", cobertura, commit limpio…). Si no
+promueve nada, termina con el código 99 y Airflow la marca "skipped": rechazar es un
+resultado normal, no una falla. Por qué rechazó queda escrito en la versión (tags `gate*`)
+y se ve con `python tasks.py modelos`.
 
 Dos formas de arrancar:
   · A mano, con la edición de la ENIGH como parámetro ("Trigger DAG w/ config"): cuando
@@ -51,6 +61,7 @@ MLFLOW = os.environ.get("ML_MLFLOW_URI", "http://mlflow:5000")
 # Lo publica el DAG `monitor` cuando empieza un episodio de drift sostenido. Mismo nombre
 # en los dos archivos (lo verifica airflow/tests/test_dags.py): ése es todo su acoplamiento.
 DRIFT_SOSTENIDO = Asset("drift_sostenido")
+SALTAR = 99   # = src.promocion.SALTAR (lo verifica tests/test_promocion.py)
 
 # Lo que reciben las tareas que hablan con MLflow. `{{ run_id }}` lo rellena Airflow en
 # cada corrida: es el linaje que une "esta corrida del DAG" con "estas versiones del
@@ -97,13 +108,13 @@ def en_contenedor(task_id: str, comando: str, escribe_datos: bool = False,
 
 @dag(
     dag_id="reentrenar",
-    description="Valida datos, entrena, compara con el champion y registra un challenger",
+    description="Valida datos, entrena, compara con el champion y decide si se promueve",
     # Arranca sola con el evento de `monitor` (Hito 8). A mano funciona igual que antes.
     schedule=[DRIFT_SOSTENIDO],
     start_date=pendulum.datetime(2026, 9, 1, tz="America/Mexico_City"),
     catchup=False,
     max_active_runs=1,   # dos reentrenamientos a la vez registrarían versiones cruzadas
-    tags=["m5", "entrenamiento"],
+    tags=["m5", "m8", "entrenamiento"],
     doc_md=__doc__,
     params={"edicion": Param(2024, type="integer", minimum=2016,
                              title="Edición de la ENIGH",
@@ -126,8 +137,12 @@ def reentrenar():
     # como XCom: visible en la UI, y utilizable por una tarea futura (p. ej. notificar).
     comparar = en_contenedor("comparar_con_champion", "python -m src.comparar",
                              environment=ENTORNO_MLFLOW)
+    # El gate. No toca datos (los volúmenes van en sólo lectura igual que en las demás):
+    # sólo lee tags del registry y, si todo se cumple, mueve aliases.
+    gate = en_contenedor("decidir_promocion", "python -m src.promocion",
+                         environment=ENTORNO_MLFLOW, skip_on_exit_code=SALTAR)
 
-    construir >> validar >> entrenar >> comparar
+    construir >> validar >> entrenar >> comparar >> gate
 
 
 reentrenar()

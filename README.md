@@ -44,6 +44,13 @@ alguien la promueve. Los contenedores vivos no cambian al mover el alias —lo l
 arrancar—, así que para que un cambio llegue: `docker compose restart api`. Rollback es
 lo mismo con la versión anterior.
 
+Desde el Hito 8 el DAG `reentrenar` termina con un **gate** (`src/promocion.py`): promueve
+solo si el modelo nuevo le gana al champion por más que la banda de ruido, con commit
+limpio, cobertura ≥ 78 % y el resto de los criterios; si no, lo rechaza y deja escrito
+por qué. `python tasks.py gate <run_id> --simular` muestra qué decidiría sin tocar nada,
+y `python tasks.py modelos` muestra lo que decidió. Promover a mano sigue existiendo
+(primer champion, rollback) y deja el mismo rastro: `@anterior` y `promovida_por=manual`.
+
 `train` necesita `data/processed/` (lo generan los notebooks 01–02); se monta en sólo
 lectura, no se copia a la imagen.
 

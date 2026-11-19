@@ -34,6 +34,7 @@ def test_reentrenar_tiene_el_orden_correcto(dagbag):
     assert dag.get_task("construir_dataset").downstream_task_ids == {"validar_datos"}
     assert dag.get_task("validar_datos").downstream_task_ids == {"entrenar"}
     assert dag.get_task("entrenar").downstream_task_ids == {"comparar_con_champion"}
+    assert dag.get_task("comparar_con_champion").downstream_task_ids == {"decidir_promocion"}
     assert dag.max_active_runs == 1 and dag.schedule == [Asset("drift_sostenido")]
 
 
@@ -47,8 +48,16 @@ def test_solo_construir_escribe_y_todas_llevan_edicion_y_linaje(dagbag):
         assert escribe == esperado, f"{t.task_id} escribe en {escribe}"
         assert t.environment["EDICION"] == "{{ params.edicion }}"
         assert t.mount_tmp_dir is False
-    for tid in ("entrenar", "comparar_con_champion"):
+    for tid in ("entrenar", "comparar_con_champion", "decidir_promocion"):
         assert dag.get_task(tid).environment["ORQUESTADOR_RUN_ID"] == "{{ run_id }}"
+
+
+def test_el_gate_rechaza_como_skip_no_como_falla(dagbag):
+    """Hito 8: "no promover" es un resultado normal del gate. Pinta la tarea de rosa
+    (skipped), no de rojo; un error de verdad (sin versión, MLflow caído) sí falla."""
+    gate = dagbag.dags["reentrenar"].get_task("decidir_promocion")
+    assert gate.command == "python -m src.promocion"
+    assert 99 in gate.skip_on_exit_code and 1 not in gate.skip_on_exit_code
 
 
 @pytest.mark.parametrize("archivo", sorted(DAGS.glob("*.py")), ids=lambda p: p.name)
