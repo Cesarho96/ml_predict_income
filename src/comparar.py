@@ -5,9 +5,10 @@
 
 Última tarea del DAG `reentrenar`. Tres reglas:
 
-1. **Nunca toca @champion.** Promover es una decisión (de una persona hoy, de un gate
-   con más evidencia en el Hito 8). Esta tarea sólo deja el candidato listo y el
-   veredicto escrito en el registry, al lado de la versión.
+1. **Nunca toca @champion.** Promover es una decisión: la toma la tarea siguiente
+   (`src/promocion.py`, el gate del Hito 8) o una persona (`tasks.py promover`). Esta
+   tarea sólo deja el candidato listo y la evidencia escrita en el registry, al lado de
+   la versión: el gate decide leyendo esos tags, no re-midiendo.
 
 2. **Compara sobre los MISMOS datos.** No compara las métricas que cada corrida loggeó:
    si la ENIGH cambió, cada una se midió en un test distinto y la diferencia no dice
@@ -161,6 +162,7 @@ def comparar(corrida: str, proc: Path = PROC, client: MlflowClient | None = None
         # El veredicto queda escrito EN la versión: quien abra el registry lo ve sin
         # buscar logs de Airflow.
         for k, val in {"veredicto": v, "delta_MdAPE_pp": delta, "banda_pp": banda,
+                       "cobertura_test": cob_n,
                        "champion_comparado": champ.version if champ else None,
                        "orquestador_run_id": corrida}.items():
             if val is not None:
@@ -188,8 +190,9 @@ def informe(resultados: list[Resultado]) -> str:
             f"{_num(r.mdape_nuevo):>12} {_num(r.mdape_champion):>12} {_num(r.delta_pp):>7} "
             f"±{r.banda_pp:<5}  {r.veredicto}"
             + ("  → @challenger" if r.marcado_challenger else "  (sin alias)"))
-    lineas.append("@champion NO se tocó. Para promover: python tasks.py promover "
-                  "<segmento> <versión>")
+    lineas.append("@champion NO se tocó aquí: lo decide la tarea siguiente (el gate, "
+                  "src/promocion.py) o una persona: python tasks.py promover <segmento> "
+                  "<versión>")
     return "\n".join(lineas)
 
 

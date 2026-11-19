@@ -1,4 +1,4 @@
-"""Muestra el registry en la terminal: versiones, aliases, origen y veredicto.
+"""Muestra el registry en la terminal: versiones, aliases, origen, veredicto y gate.
 
     python tasks.py modelos
 
@@ -24,17 +24,21 @@ def main() -> None:
 
         print(f"\n{nombre}")
         print(f"  {'ver':>4}  {'aliases':<24} {'origen':<8} {'git':<14} "
-              f"{'MdAPE test':>10}  veredicto")
+              f"{'MdAPE test':>10}  {'veredicto':<12} gate")
         versiones = client.search_model_versions(f"name = '{nombre}'")
         for mv in sorted(versiones, key=lambda v: int(v.version), reverse=True):
             run = client.get_run(mv.run_id)
             mdape = run.data.metrics.get("test_MdAPE")
+            # Qué decidió el gate (Hito 8) y si una persona promovió a mano.
+            gate = mv.tags.get("gate", "—")
+            if mv.tags.get("promovida_por") == "manual":
+                gate = "manual" if gate == "—" else f"{gate}, luego manual"
             print(f"  {'v' + str(mv.version):>4}  "
                   f"{' '.join(por_version.get(str(mv.version), [])) or '—':<24} "
                   f"{run.data.tags.get('origen', 'manual'):<8} "
                   f"{run.data.tags.get('git_sha', '?')[:14]:<14} "
                   f"{(f'{mdape:.2f}%' if mdape is not None else '—'):>10}  "
-                  f"{mv.tags.get('veredicto', '—')}")
+                  f"{mv.tags.get('veredicto', '—'):<12} {gate}")
 
 
 if __name__ == "__main__":

@@ -234,6 +234,16 @@ def promover(*args):
     corre(PY, "scripts/promover.py", *args, env={"MLFLOW_TRACKING_URI": TRACKING})
 
 
+@tarea("el gate de promoción a mano: gate <run_id de reentrenar> [--simular]")
+def gate(corrida: str = "", *args):
+    """Lo mismo que la tarea `decidir_promocion` del DAG. Con --simular no escribe nada."""
+    if not corrida:
+        sys.exit("uso: python tasks.py gate <run_id de una corrida de reentrenar> [--simular]")
+    # check=False: "no promover" sale con 99 (así Airflow lo marca skipped); aquí no es error.
+    corre(PY, "-m", "src.promocion", "--corrida", corrida, *args,
+          env={"MLFLOW_TRACKING_URI": TRACKING}, check=False)
+
+
 # ------------------------------------------------------------- API
 @tarea("levanta la API en local, sin Docker, con recarga automática (usa MLflow)")
 def api():

@@ -89,6 +89,9 @@ def test_con_champion_marca_challenger_y_no_toca_champion(registry, tmp_path):
         assert _aliases(registry, r.nombre) == {"champion": "1", "challenger": "2"}
         tags = registry.get_model_version(r.nombre, "2").tags
         assert tags["veredicto"] == "equivalente" and tags["orquestador_run_id"] == "rid-1"
+        # La evidencia que lee el gate (src/promocion.py) queda escrita en la versión.
+        assert float(tags["cobertura_test"]) == r.cobertura_nuevo
+        assert tags["champion_comparado"] == "1"
 
 
 def test_sin_champion_tambien_deja_candidato(registry, tmp_path):
