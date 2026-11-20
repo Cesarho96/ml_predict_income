@@ -12,7 +12,7 @@
 #        no cambia: sólo habla HTTP con este servidor.
 
 # Misma base, fijada por el mismo digest que el Dockerfile de la API (ver ahí el porqué).
-FROM python:3.11-slim@sha256:e41613d42d4891e4930f79523f93f81bbc7632584ec65e36ab055f41a800b41e
+FROM python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
