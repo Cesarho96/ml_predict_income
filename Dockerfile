@@ -39,7 +39,7 @@
 # abre el PR cuando sale una nueva (.github/dependabot.yml), pasa por CI y el escaneo, y
 # así llegan los parches de Debian sin que nadie tenga que acordarse. El tag se deja sólo
 # para que un humano sepa qué es; Docker usa el digest.
-FROM python:3.11-slim@sha256:e41613d42d4891e4930f79523f93f81bbc7632584ec65e36ab055f41a800b41e AS python-oficial
+FROM python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535 AS python-oficial
 
 # ----------------------------------------------------------------- builder: servicio
 FROM python-oficial AS builder
