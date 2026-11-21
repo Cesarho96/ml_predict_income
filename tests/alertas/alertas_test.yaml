@@ -30,7 +30,7 @@ tests:
           - exp_labels: {severity: warning, namespace: ml-predict-income, segment: ocupados}
             exp_annotations:
               summary: "Los pods sirven 2 versiones distintas del modelo ocupados"
-              description: "Se movió @champion y los pods viejos siguen con la versión anterior. Si fue a propósito: kubectl rollout restart deploy/api -n ml-predict-income"
+              description: "Un rollout no terminó o el reconciliador no está corriendo. Revisa: kubectl rollout status deploy/api -n ml-predict-income; kubectl get jobs -n ml-predict-income -l app=reconciliador"
 
   - name: ApiReplicasInsuficientes dispara tras 2 min con 1 pod
     interval: 1m

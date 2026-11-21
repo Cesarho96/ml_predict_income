@@ -73,10 +73,11 @@ spec:
     - name: api.modelo
       rules:
         - alert: ModelosMezclados
-          # Propia de servir modelos desde un registry: cada pod resuelve @champion AL
-          # ARRANCAR (Hito 3). Si alguien mueve el alias, sólo los pods nuevos toman la
-          # versión nueva: usuarios distintos reciben predicciones de modelos distintos.
-          # Normal durante un despliegue (minutos); no por 15.
+          # Propia de servir modelos desde un registry: usuarios distintos reciben
+          # predicciones de modelos distintos. Desde el Hito 8c el reconciliador fija la
+          # versión en el Deployment y un rollout cambia todos los pods en minutos, así
+          # que mezcla por 15 min = un rollout atorado (un pod nuevo que no pasa /ready) o
+          # un reconciliador suspendido o fallando a la mitad.
           expr: |
             count by (namespace, segment) (
               count by (namespace, segment, version) (income_model_info{namespace="ml-predict-income"})
@@ -86,4 +87,4 @@ spec:
             severity: warning
           annotations:
             summary: "Los pods sirven {{ $value }} versiones distintas del modelo {{ $labels.segment }}"
-            description: "Se movió @champion y los pods viejos siguen con la versión anterior. Si fue a propósito: kubectl rollout restart deploy/api -n ml-predict-income"
+            description: "Un rollout no terminó o el reconciliador no está corriendo. Revisa: kubectl rollout status deploy/api -n ml-predict-income; kubectl get jobs -n ml-predict-income -l app=reconciliador"

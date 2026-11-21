@@ -28,8 +28,9 @@ cumple TODO, y siempre deja escrito por qué (tags `gate*` en la versión):
 Cada segmento se decide por separado: son modelos independientes.
 
 Promover = mover @champion a la versión nueva, dejar la anterior como @anterior (el
-rollback es una línea, la imprime al final) y retirar @challenger. Los pods vivos no
-cambian solos: leen @champion al arrancar.
+rollback es una línea, la imprime al final) y retirar @challenger. Llevarlo a los pods
+es trabajo del reconciliador del cluster (src/reconciliador.py, Hito 8c): en menos de un
+minuto fija la versión nueva en el Deployment y Kubernetes hace el rolling update.
 """
 
 from __future__ import annotations
@@ -231,8 +232,8 @@ def informe(decisiones: list[Decision], simular: bool) -> str:
     if simular:
         lineas.append("\n--simular: no se escribió nada en el registry.")
     elif any(d.promovida and not d.nota for d in decisiones):
-        lineas.append("\nLos pods vivos siguen con el modelo anterior hasta reiniciar: "
-                      "kubectl rollout restart deployment/api -n ml-predict-income")
+        lineas.append("\nEl reconciliador del cluster lo despliega en menos de un minuto "
+                      "(Hito 8c). Para no esperar: python tasks.py reconciliar")
     return "\n".join(lineas)
 
 
