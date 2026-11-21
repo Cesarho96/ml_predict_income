@@ -1,0 +1,112 @@
+# El reconciliador (Hito 8c): cada minuto compara @champion en MLflow con la versión
+# fijada en el Deployment `api` y, si difieren, la cambia → rolling update sin caída.
+# Código: src/reconciliador.py. Mismo patrón que Argo CD o Flux: el cluster JALA el
+# cambio; ni Airflow ni el gate tienen credenciales del cluster.
+#
+# Cuatro piezas: una identidad (ServiceAccount), lo que esa identidad puede hacer (Role),
+# el enlace entre las dos (RoleBinding) y el programa que la usa (CronJob).
+
+# ------------------------------------------------------------------ identidad
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: reconciliador
+  labels:
+    app: reconciliador
+---
+# ------------------------------------------------------------------ permisos: lo MÍNIMO
+# Un Role vale sólo en su namespace (un ClusterRole valdría en todo el cluster). Aquí:
+# leer y parchar UN Deployment, por nombre. No puede crear ni borrar nada, ni ver
+# Secrets, ni tocar otro Deployment. Si alguien roba este token, eso es todo lo que hay.
+# Pruébalo: kubectl auth can-i delete deployment/api -n ml-predict-income \
+#             --as=system:serviceaccount:ml-predict-income:reconciliador     → no
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: reconciliador
+  labels:
+    app: reconciliador
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["api"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: reconciliador
+  labels:
+    app: reconciliador
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: reconciliador
+subjects:
+  - kind: ServiceAccount
+    name: reconciliador
+    namespace: ml-predict-income
+---
+# ------------------------------------------------------------------ el programa
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: reconciliador
+  labels:
+    app: reconciliador
+spec:
+  schedule: "* * * * *"            # cada minuto: la latencia máxima de un cambio de champion
+  concurrencyPolicy: Forbid        # nunca dos a la vez (dos PATCH cruzados)
+  startingDeadlineSeconds: 30      # si se perdió su minuto (nodo ocupado), no se encima
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3        # los fallidos se quedan para leer sus logs
+  jobTemplate:
+    spec:
+      backoffLimit: 0              # sin reintentos: el siguiente minuto ES el reintento
+      activeDeadlineSeconds: 50    # termina antes de que toque el siguiente
+      ttlSecondsAfterFinished: 900
+      template:
+        metadata:
+          labels:
+            app: reconciliador     # ≠ app: api → no entra al Service, al PDB ni al HPA
+        spec:
+          serviceAccountName: reconciliador
+          automountServiceAccountToken: true   # éste SÍ habla con Kubernetes (la API no)
+          restartPolicy: Never
+          securityContext:                     # mismas reglas que la API (Pod Security restricted)
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: reconciliador
+              # La MISMA imagen que la API (el tag lo pone kustomization.yaml): el código
+              # que decide qué servir viaja con el código que sirve.
+              image: ml-predict-income
+              command: ["python", "-m", "src.reconciliador"]
+              envFrom:
+                - configMapRef:
+                    name: api-config         # MLFLOW_TRACKING_URI y los timeouts
+              env:
+                - name: RECONCILIAR_DEPLOYMENT
+                  value: api
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 384Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp            # HOME=/tmp (Dockerfile)
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi

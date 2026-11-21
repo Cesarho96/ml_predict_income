@@ -24,6 +24,7 @@ resources:
   - ruta.yaml
   - monitor.yaml
   - alertas.yaml
+  - reconciliador.yaml        # Hito 8c: @champion del registry → Deployment
 
 # El dashboard de Grafana como ConfigMap con la etiqueta que el sidecar de Grafana busca
 # (k8s/cluster/monitoreo/values.yaml). Grafana lo carga solo; el JSON vive en git.

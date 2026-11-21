@@ -223,3 +223,20 @@ def test_el_dag_salta_con_el_mismo_codigo_que_usa_el_modulo():
     dag = Path(__file__).resolve().parent.parent / "airflow" / "dags" / "reentrenar.py"
     m = re.search(r"^SALTAR = (\d+)", dag.read_text(encoding="utf-8"), re.MULTILINE)
     assert m and int(m.group(1)) == promocion.SALTAR
+
+
+# ------------------------------------------------------------------ Hito 8c: --degradar
+def test_degradar_solo_cambia_las_iteraciones():
+    from src.train import SEGMENTOS, parametros
+    for slug in SEGMENTOS:
+        normal, peor = parametros(slug), parametros(slug, degradar=True)
+        assert peor == {**normal, "max_iter": 10} and normal["max_iter"] == 300
+
+
+def test_un_modelo_degradado_nunca_pasa_el_gate_aunque_gane(registry):
+    """Aun con veredicto 'mejor' y todo lo demás en regla: sólo una persona lo promueve."""
+    _escenario(registry)
+    _registrar({**LIMPIO, "orquestador_run_id": "rid-2", "degradado": "si"})   # v3
+    _como_comparar(registry, "mejor", version="3")
+    for d in decidir("rid-2", client=registry):
+        assert not d.promovida and "degradado" in d.motivo
