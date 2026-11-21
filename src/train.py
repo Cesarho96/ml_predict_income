@@ -3,6 +3,7 @@
     python tasks.py train               # la forma canónica: en contenedor Linux
     python -m src.train                 # directo, contra $MLFLOW_TRACKING_URI
     python -m src.train --sin-registrar # sólo loggea la corrida
+    python tasks.py train --degradar    # un modelo PEOR a propósito (demostración, Hito 8c)
 
 Dónde se entrena importa. El Hito 3 demostró que el mismo commit, los mismos datos, la
 misma semilla y las mismas versiones de librerías dan un modelo DISTINTO en Windows y
@@ -84,6 +85,21 @@ SEGMENTOS = {
                    "learning_rate": 0.12, "l2_regularization": 0, "random_state": 0},
     },
 }
+
+
+# Hito 8c: para demostrar que el ciclo corrige un champion malo hace falta uno malo.
+# Con 10 iteraciones en vez de 300, el modelo apenas empieza a aprender: en la ENIGH 2024
+# el MdAPE de test sube de 30.77 a 34.0 (ocupados) y de 41.12 a 45.05 (no ocupados), muy
+# por encima de las bandas de ruido, y aun así pasa validar() y cubre el 80 %. Es un
+# modelo plausible y peor, que es justo el caso difícil. Con 5 iteraciones ni siquiera
+# pasa validar(): 17 años de escolaridad predicen lo mismo que 6.
+# La corrida queda marcada `degradado=si` y el gate (src/promocion.py) nunca la promueve:
+# sólo llega a @champion si una PERSONA la promueve a mano.
+DEGRADADO = {"max_iter": 10}
+
+
+def parametros(slug: str, degradar: bool = False) -> dict:
+    return {**SEGMENTOS[slug]["params"], **(DEGRADADO if degradar else {})}
 
 
 # ---------------------------------------------------------------- métricas
@@ -224,8 +240,11 @@ def configurar_mlflow(experimento: str) -> None:
     log.info("MLflow: %s (experimento %s)", uri, experimento)
 
 
-def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None:
+def main(registrar: bool = True, experimento: str = "ingreso-enigh2024",
+         degradar: bool = False) -> None:
     configurar_mlflow(experimento)
+    if degradar:
+        log.warning("--degradar: se entrena un modelo PEOR a propósito (%s)", DEGRADADO)
 
     df = cargar_datos()
     resumen = {}
@@ -234,7 +253,9 @@ def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None
         log.info("=== %s ===", cfg["etiqueta"])
         d = preparar_segmento(df, cfg)
 
-        with mlflow.start_run(run_name=f"{slug}-{time.strftime('%Y%m%d-%H%M%S')}"):
+        params = parametros(slug, degradar)
+        prefijo = "DEGRADADO-" if degradar else ""
+        with mlflow.start_run(run_name=f"{prefijo}{slug}-{time.strftime('%Y%m%d-%H%M%S')}"):
             mlflow.set_tags({"segmento": slug, "familia": "HistGradientBoosting",
                              "git_sha": sha_git(), "objetivo": "quantile",
                              "target": "log(ingreso_mensual)",
@@ -246,10 +267,11 @@ def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None
                              # sin adivinar "la versión más nueva" (que podría ser de otro).
                              "origen": "airflow" if ORQUESTADOR_RUN_ID else "manual",
                              **({"orquestador_run_id": ORQUESTADOR_RUN_ID}
-                                if ORQUESTADOR_RUN_ID else {})})
+                                if ORQUESTADOR_RUN_ID else {}),
+                             **({"degradado": "si"} if degradar else {})})
             # La edición de la ENIGH es parte de la identidad del modelo: dos corridas
             # del mismo commit con ediciones distintas son modelos distintos.
-            mlflow.log_params({**cfg["params"], "n_features": len(d["features"]),
+            mlflow.log_params({**params, "n_features": len(d["features"]),
                                "edicion_enigh": datos.EDICION,
                                "dataset": datos.dataset(datos.EDICION),
                                "cobertura_objetivo": COBERTURA_OBJETIVO,
@@ -259,7 +281,7 @@ def main(registrar: bool = True, experimento: str = "ingreso-enigh2024") -> None
                                 "n_test": int(d["te"].sum())})
 
             t0 = time.time()
-            cuantiles, factor = entrenar_segmento(d, cfg["params"])
+            cuantiles, factor = entrenar_segmento(d, params)
             mlflow.log_metric("segundos_entrenamiento", round(time.time() - t0, 1))
             mlflow.log_param("factor_conformal", factor)
 
@@ -337,5 +359,7 @@ if __name__ == "__main__":
     ap.add_argument("--sin-registrar", action="store_true",
                     help="loggea la corrida pero no registra el modelo")
     ap.add_argument("--experimento", default="ingreso-enigh2024")
+    ap.add_argument("--degradar", action="store_true",
+                    help="entrena un modelo PEOR a propósito, marcado degradado=si (Hito 8c)")
     a = ap.parse_args()
-    main(registrar=not a.sin_registrar, experimento=a.experimento)
+    main(registrar=not a.sin_registrar, experimento=a.experimento, degradar=a.degradar)

@@ -41,6 +41,13 @@ spec:
             - configMapRef:
                 name: api-config     # todas las variables de config.yaml
           env:
+            # MODEL_URI_OCUPADOS y MODEL_URI_NO_OCUPADOS (la versión EXACTA que carga cada
+            # pod) NO van aquí: las escribe el reconciliador (Hito 8c, reconciliador.yaml)
+            # a partir de @champion. Si estuvieran en git, cada `kubectl apply` las regresaría
+            # al valor del archivo y pelearía con el reconciliador. `kubectl apply` no borra
+            # lo que él puso: sólo toca los campos que este archivo declara. Sin ellas
+            # (primer despliegue), el pod resuelve @champion al arrancar (MODEL_ALIAS).
+            #
             # Conexión al registro de predicciones (Hito 7b), desde un Secret que NO está
             # en git (lo crea `tasks.py secreto-k8s`). Obligatorio a propósito: si falta,
             # el pod no arranca (CreateContainerConfigError) y el error se ve al desplegar.

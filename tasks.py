@@ -207,14 +207,16 @@ def preparar():
           "y ml-predict-income-datos")
 
 
-@tarea("entrena EN CONTENEDOR Linux y registra (la forma canónica)")
-def train():
+@tarea("entrena EN CONTENEDOR Linux y registra (la forma canónica): train [--degradar]")
+def train(*args):
     sha = _git_sha()
     if sha.endswith("-dirty"):
         print(f"⚠  hay cambios sin commitear: la corrida quedará marcada como {sha}")
     env = {"GIT_SHA": sha}
     corre(*COMPOSE, "--profile", "train", "build", "train", env=env)
-    corre(*COMPOSE, "--profile", "train", "run", "--rm", "train", env=env)
+    # Con argumentos (p. ej. --degradar, Hito 8c) se reemplaza el comando de la imagen.
+    comando = ("python", "-m", "src.train", *args) if args else ()
+    corre(*COMPOSE, "--profile", "train", "run", "--rm", "train", *comando, env=env)
 
 
 @tarea("entrena con el Python de tu máquina (rápido, pero NO canónico)")
@@ -232,6 +234,22 @@ def modelos():
 @tarea("mueve un alias: promover <segmento> <versión> [alias]")
 def promover(*args):
     corre(PY, "scripts/promover.py", *args, env={"MLFLOW_TRACKING_URI": TRACKING})
+
+
+@tarea("corre el reconciliador YA (sin esperar su minuto) y muestra lo que hizo")
+def reconciliar():
+    """Un Job a partir del CronJob: el mismo programa, la misma ServiceAccount (Hito 8c)."""
+    ns, nombre = "ml-predict-income", f"reconciliar-{int(time.time())}"
+    corre("kubectl", "create", "job", nombre, "--from=cronjob/reconciliador", "-n", ns)
+    print("esperando a que termine…", flush=True)
+    for _ in range(45):                     # `kubectl wait` sólo espera UNA condición
+        r = subprocess.run(["kubectl", "get", f"job/{nombre}", "-n", ns, "-o",
+                            "jsonpath={.status.succeeded}/{.status.failed}"],
+                           capture_output=True, text=True)
+        if r.stdout.strip().strip("/"):          # "1/" terminó bien, "/1" falló
+            break
+        time.sleep(2)
+    corre("kubectl", "logs", f"job/{nombre}", "-n", ns, check=False)
 
 
 @tarea("el gate de promoción a mano: gate <run_id de reentrenar> [--simular]")

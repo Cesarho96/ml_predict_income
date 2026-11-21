@@ -114,6 +114,33 @@ El DAG `monitor` de Airflow hace lo mismo cada noche (ventana de 24 h) o a mano
 Si el drift es sostenido (`mediciones_para_reentrenar` mediciones seguidas; 3 por
 omisión) publica el evento `drift_sostenido` y el DAG `reentrenar` arranca solo (Hito 8).
 
+## El reconciliador: @champion → Deployment (Hito 8c)
+
+`reconciliador.yaml` corre `src/reconciliador.py` cada minuto: si @champion en MLflow no
+es la versión fijada en `deployment/api` (`MODEL_URI_*`), la cambia y Kubernetes hace el
+rolling update. Promover (el gate o `tasks.py promover`) basta para desplegar un modelo.
+
+```powershell
+python tasks.py reconciliar                                   # correrlo YA y ver qué hizo
+kubectl get cronjob,jobs -n ml-predict-income -l app=reconciliador
+kubectl rollout history deploy/api -n ml-predict-income       # CHANGE-CAUSE: qué champion
+kubectl auth can-i delete deployment/api -n ml-predict-income `
+  --as=system:serviceaccount:ml-predict-income:reconciliador  # no: sólo get y patch
+```
+
+- **Regresar un MODELO = mover el alias**: `python tasks.py promover <segmento> <versión>`
+  (el gate deja la anterior como `@anterior`). `kubectl rollout undo` no sirve para eso: al
+  minuto el reconciliador regresa el Deployment a @champion. Sí sirve para regresar CÓDIGO
+  (con un segundo rollout: el undo también regresa las versiones fijadas y el
+  reconciliador las vuelve a poner).
+- CHANGE-CAUSE es una anotación del Deployment: un `kubectl apply` de código nuevo hereda
+  el último texto del reconciliador. Qué imagen y qué versiones tiene una revisión:
+  `kubectl rollout history deploy/api -n ml-predict-income --revision=<N>`.
+- **Pausar en un incidente** (y reanudar con `false`). El parche en YAML evita pelear con
+  las comillas de PowerShell: `kubectl patch cronjob reconciliador -n ml-predict-income -p "spec: {suspend: true}"`
+- `/ready` muestra `"alias": null` en los pods que corren una versión fijada: el pod no
+  eligió el modelo por alias; se lo dieron por versión. El porqué está en el historial.
+
 ## Trampas que ya aparecieron
 
 | Síntoma | Causa |

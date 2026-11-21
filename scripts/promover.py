@@ -11,9 +11,9 @@ Mover @champion deja el MISMO rastro que el gate (src.promocion.mover_champion):
 champion previo queda como @anterior, @challenger se retira si era ésta, y la versión
 queda etiquetada `promovida_por=manual`. Imprime el rollback para copiar y pegar.
 
-Los pods vivos no cambian: el alias se lee al arrancar. Para que el cambio llegue:
-    kubectl rollout restart deployment/api -n ml-predict-income     (kind, Hito 6)
-    docker compose restart api                                      (compose)
+En kind, el reconciliador (Hito 8c) lleva el cambio a los pods en menos de un minuto:
+    python tasks.py reconciliar          # para no esperar
+En compose no hay reconciliador: docker compose restart api
 """
 
 from __future__ import annotations
@@ -65,8 +65,9 @@ def main() -> None:
         if a.alias == "champion":
             print(f"  @anterior → v{anterior}")
         print(f"  rollback: python tasks.py promover {a.segmento} {anterior} {a.alias}")
-    print("  los pods vivos no cambian hasta reiniciar:  "
-          "kubectl rollout restart deployment/api -n ml-predict-income")
+    if a.alias == "champion":
+        print("  en kind lo despliega el reconciliador en <1 min (ya: python tasks.py "
+              "reconciliar); en compose: docker compose restart api")
 
 
 if __name__ == "__main__":
